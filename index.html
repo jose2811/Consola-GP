@@ -58,6 +58,13 @@
   .btn-wa:active{opacity:.85;}
   .btn-refresh{display:block;width:100%;background:var(--m1);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:10px;}
   .btn-refresh:active{opacity:.85;}
+  .btn-refresh:disabled{opacity:.6;cursor:default;}
+  .buzon-status{font-size:12.5px;line-height:1.5;padding:9px 12px;border-radius:10px;margin:-2px 0 12px;background:var(--neutral-soft);color:var(--muted);}
+  .buzon-status.loading{background:var(--m1-soft);color:var(--m1);}
+  .buzon-status.ok{background:var(--ok-soft);color:var(--ok);}
+  .buzon-status.ok.changed{font-weight:700;}
+  .buzon-status.err{background:var(--danger-soft);color:var(--danger);}
+  .buzon-status b{font-weight:700;}
   .tg-label{color:rgba(255,255,255,.65);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
 
   .tg-hero-wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
@@ -236,6 +243,7 @@
   </div>
 
   <button class="btn-refresh" id="btnActualizarBuzon">🔄 Actualizar desde el buzón</button>
+  <div class="buzon-status" id="buzonStatus">Aún no se ha actualizado desde el buzón.</div>
 
   <div class="upload-box" id="uploadBox">
     <div class="ico">&#128193;</div>
@@ -286,7 +294,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.25.1 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.26.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -394,21 +402,64 @@
   function saveCortesHoy(c){ lsSet(CORTES_KEY, JSON.stringify(c)); }
   let cortesHoyPorSucursal = loadCortesHoy();
 
+  // ---------- Estado persistente del buzón: para que SIEMPRE se vea (aunque cierres
+  // la consola) cuándo fue la última actualización, si funcionó, y en qué sucursales
+  // hubo cambios reales — no solo un toast que se borra en 2 segundos. ----------
+  const BUZON_STATUS_KEY = 'director:buzonStatus';
+  function saveBuzonStatus(s){ lsSet(BUZON_STATUS_KEY, JSON.stringify(s)); }
+  function loadBuzonStatus(){ try{ return JSON.parse(lsGet(BUZON_STATUS_KEY)||'null'); }catch(e){ return null; } }
+  function renderBuzonStatus(){
+    const el = $('#buzonStatus');
+    if(!el) return;
+    const s = loadBuzonStatus();
+    if(!s){ el.textContent = 'Aún no se ha actualizado desde el buzón.'; el.className = 'buzon-status'; return; }
+    const hora = new Date(s.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+    if(s.ok){
+      if(s.changed && s.changed.length){
+        el.innerHTML = `✅ Actualizado ${hora} — cambios en: <b>${s.changed.map(escapeHTML).join(', ')}</b>`;
+        el.className = 'buzon-status ok changed';
+      }else{
+        el.innerHTML = `✅ Actualizado ${hora} — sin cambios nuevos`;
+        el.className = 'buzon-status ok';
+      }
+    }else{
+      el.innerHTML = `⚠️ Último intento ${hora} falló — ${escapeHTML(s.error||'sin conexión')}`;
+      el.className = 'buzon-status err';
+    }
+  }
+  function setBuzonLoading(on){
+    const btn = $('#btnActualizarBuzon');
+    const el = $('#buzonStatus');
+    if(btn){ btn.disabled = on; btn.textContent = on ? '🔄 Actualizando...' : '🔄 Actualizar desde el buzón'; }
+    if(on && el){ el.textContent = 'Conectando con el buzón...'; el.className = 'buzon-status loading'; }
+  }
+
   async function fetchFromBuzon(silent){
     if(!BUZON_URL){ if(!silent) toast('Buzón no configurado'); return; }
-    if(!silent) toast('Actualizando desde el buzón...');
+    setBuzonLoading(true);
+    // Si el buzón no responde, no nos quedamos esperando para siempre sin avisar —
+    // a los 20s se cancela solo y se muestra el aviso de que algo falló.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(()=>controller.abort(), 20000);
     try{
-      const resp = await fetch(`${BUZON_URL}?token=${encodeURIComponent(BUZON_TOKEN)}`);
+      const resp = await fetch(`${BUZON_URL}?token=${encodeURIComponent(BUZON_TOKEN)}`, {signal: controller.signal});
       const json = await resp.json();
       if(!json || !json.ok){
-        if(!silent) toast('No se pudo leer el buzón: ' + (json&&json.error||'error desconocido'));
+        const errMsg = (json && json.error) || 'error desconocido';
+        saveBuzonStatus({ts: Date.now(), ok:false, error: errMsg});
+        if(!silent) toast('No se pudo leer el buzón: ' + errMsg);
         return;
       }
       let count = 0;
+      const changed = [];
       Object.keys(json.branches||{}).forEach(rawKey=>{
         const entry = json.branches[rawKey];
         if(!entry || !entry.data) return;
-        const key = normSucursal(entry.sucursalOriginal || rawKey);
+        const displayName = entry.sucursalOriginal || rawKey;
+        const key = normSucursal(displayName);
+        const before = branches[key] ? JSON.stringify(branches[key]) : null;
+        const after = JSON.stringify(entry.data);
+        if(before !== after) changed.push(displayName);
         mergeIntoArchive(key, entry.data.gerente, entry.data.crecimiento);
         branches[key] = entry.data;
         count++;
@@ -422,11 +473,18 @@
       saveBranches(branches);
       saveArchive(archive);
       saveCortesHoy(cortesHoyPorSucursal);
+      saveBuzonStatus({ts: Date.now(), ok:true, changed, count});
       render();
       if(!silent) toast(count ? `Actualizado — ${count} sucursal(es) del buzón` : 'El buzón todavía no tiene envíos');
     }catch(err){
       console.error('No se pudo conectar al buzón:', err);
-      if(!silent) toast('No se pudo conectar al buzón (¿sin internet?)');
+      const errMsg = (err && err.name==='AbortError') ? 'tardó demasiado en responder (20s)' : 'sin conexión';
+      saveBuzonStatus({ts: Date.now(), ok:false, error: errMsg});
+      if(!silent) toast('No se pudo conectar al buzón (' + errMsg + ')');
+    }finally{
+      clearTimeout(timeoutId);
+      setBuzonLoading(false);
+      renderBuzonStatus();
     }
   }
   // Línea compacta de "avance del día": compara el primer y el último corte de HOY
@@ -1320,7 +1378,8 @@
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
   render();
-  fetchFromBuzon(true); // al abrir la consola, jala solo lo más nuevo sin molestar con avisos
+  renderBuzonStatus(); // muestra de inmediato el estado de la última actualización (aunque sea de antes)
+  fetchFromBuzon(true); // al abrir la consola, jala lo más nuevo y actualiza el banner de estado (sin toast)
 })();
 </script>
 </body>
