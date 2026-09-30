@@ -294,7 +294,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.26.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.27.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -333,6 +333,7 @@
   // "Otros indicadores" — mismos 3 que la Agenda del Gerente (En mesa/Por enviar/
   // Rechazado), sin compromiso, aquí solo se SUMAN entre todas las sucursales cargadas.
   const OTROS_INDICADORES = [
+    {key:'por_firmar', icon:'✍️', label:'Por firmar'},
     {key:'en_mesa',    icon:'🏦', label:'En mesa'},
     {key:'por_enviar', icon:'📤', label:'Por enviar'},
     {key:'rechazado',  icon:'⛔', label:'Rechazado'},
@@ -834,6 +835,7 @@
 
     let out = `*Resumen del día — Consola del GP*\n${fmtDate(today)}${nStale? ` (${nStale} sucursal(es) con reporte no actualizado hoy)`:''}\n\n`;
     out += `Desembolsos: ${desembCount} crédito(s) — ${fmtMoney(desembMonto)}\n`;
+    out += `Por firmar: ${otrosSums.por_firmar.count} crédito(s) — ${fmtMoney(otrosSums.por_firmar.monto)}\n`;
     out += `En mesa: ${otrosSums.en_mesa.count} crédito(s) — ${fmtMoney(otrosSums.en_mesa.monto)}\n`;
     out += `Por enviar: ${otrosSums.por_enviar.count} crédito(s) — ${fmtMoney(otrosSums.por_enviar.monto)}\n`;
     out += `Rechazados: ${otrosSums.rechazado.count} crédito(s) — ${fmtMoney(otrosSums.rechazado.monto)}\n\n`;
