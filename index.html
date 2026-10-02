@@ -54,6 +54,15 @@
   .empty-state b{color:var(--ink);display:block;font-size:15px;margin-bottom:6px;}
 
   .tg-box{background:var(--ink);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;}
+  .last-updated-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px 4px;margin-bottom:12px;}
+  .last-updated-title{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
+  .lu-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;font-family:inherit;color:inherit;}
+  .lu-row:last-of-type{border-bottom:none;}
+  .lu-row:active{opacity:.7;}
+  .lu-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .lu-time{font-size:11.5px;white-space:nowrap;flex-shrink:0;}
+  .lu-time.lu-fresh{color:var(--ok);}
+  .lu-time.lu-stale{color:var(--danger);font-weight:700;}
   .btn-wa{display:block;width:100%;background:var(--m4);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:16px;}
   .btn-wa:active{opacity:.85;}
   .btn-refresh{display:block;width:100%;background:var(--m1);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:10px;}
@@ -262,6 +271,11 @@
 
   <div class="tg-box" id="totalGeneral" style="display:none;"></div>
 
+  <div class="last-updated-box" id="lastUpdatedWrap" style="display:none;">
+    <div class="last-updated-title">Última actualización por sucursal</div>
+    <div id="lastUpdatedList"></div>
+  </div>
+
   <div class="upload-box" id="uploadBox">
     <div class="ico">&#128193;</div>
     <div class="t1">Cargar reportes de gerentes a mano (respaldo)</div>
@@ -296,7 +310,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.28.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.29.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1116,6 +1130,38 @@
       </div>`;
   }
 
+  // ---------- Última actualización por sucursal (vista rápida, sin bajar) ----------
+  // Mismo criterio de "atrasada" que ya usa cada tarjeta más abajo (renderBranches),
+  // solo que aquí se ve de un vistazo y ordenado con la más atrasada primero.
+  function renderLastUpdated(){
+    const wrap = $('#lastUpdatedWrap');
+    const list = $('#lastUpdatedList');
+    const today = todayStr();
+    const entries = Object.entries(branches);
+    if(!entries.length){ wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    const rows = entries.map(([sucursal, data])=>{
+      const dateKey = data.marcadorDias && data.marcadorDias[today] ? today : latestMarcadorDate(data);
+      const isFresh = dateKey === today;
+      const exportedAt = data.exportedAt ? new Date(data.exportedAt) : null;
+      const exportedStr = exportedAt ? exportedAt.toLocaleString('es-MX',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'sin envíos';
+      const sortTime = exportedAt ? exportedAt.getTime() : -Infinity; // sin ningún envío = siempre hasta arriba
+      return { sucursal, nombre: data.sucursal||sucursal, isFresh, exportedStr, sortTime };
+    });
+    rows.sort((a,b)=> a.sortTime - b.sortTime);
+    list.innerHTML = rows.map(r=>`
+      <button type="button" class="lu-row" data-jump="${escapeHTML(r.sucursal)}">
+        <span class="lu-name">${escapeHTML(r.nombre)}</span>
+        <span class="lu-time ${r.isFresh?'lu-fresh':'lu-stale'}">${r.isFresh?'✓':'⚠'} ${r.exportedStr}</span>
+      </button>`).join('');
+    list.querySelectorAll('[data-jump]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const card = document.querySelector(`.branch-card[data-sucursal="${CSS.escape(btn.dataset.jump)}"]`);
+        if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
+      });
+    });
+  }
+
   function renderBranches(){
     const wrap = $('#branchesWrap');
     const today = todayStr();
@@ -1365,10 +1411,13 @@
     $('#btnCopyDaySummary').style.display = n ? '' : 'none';
     if(n){
       renderTotalGeneral();
+      renderLastUpdated();
       renderDayChips();
       renderCubetaGrid();
       STAGE_TILES.forEach(renderStageTile);
       renderBranches();
+    } else {
+      $('#lastUpdatedWrap').style.display = 'none';
     }
     // Caja de carga: grande solo la primera vez (mientras no hay nada cargado);
     // en cuanto ya trabajas con la Consola día a día, se vuelve una línea chica.
