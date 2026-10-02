@@ -245,12 +245,7 @@
   <button class="btn-refresh" id="btnActualizarBuzon">🔄 Actualizar desde el buzón</button>
   <div class="buzon-status" id="buzonStatus">Aún no se ha actualizado desde el buzón.</div>
 
-  <div class="upload-box" id="uploadBox">
-    <div class="ico">&#128193;</div>
-    <div class="t1">Cargar reportes de gerentes a mano (respaldo)</div>
-    <div class="t2">Solo si el buzón automático falla — selecciona o arrastra uno o varios archivos .json que te hayan mandado</div>
-  </div>
-  <input type="file" id="fileInput" accept="application/json,.json" multiple>
+  <button class="btn-wa" id="btnCopyDaySummary" style="display:none;">📋 Copiar resumen del día (WhatsApp)</button>
 
   <div class="status-row">
     <span id="statusText"><b>0</b> sucursales cargadas</span>
@@ -262,12 +257,19 @@
 
   <div id="emptyState" class="empty-state">
     <b>Todavía no has cargado nada</b>
-    Pídele a cada gerente que abra su Agenda del Gerente, toque "Exportar datos (JSON)" y te mande el archivo. Cárgalos aquí arriba, uno por uno o todos juntos.
+    Pídele a cada gerente que abra su Agenda del Gerente, toque "Exportar datos (JSON)" y te mande el archivo. Cárgalos aquí abajo, uno por uno o todos juntos.
   </div>
 
+  <div class="tg-box" id="totalGeneral" style="display:none;"></div>
+
+  <div class="upload-box" id="uploadBox">
+    <div class="ico">&#128193;</div>
+    <div class="t1">Cargar reportes de gerentes a mano (respaldo)</div>
+    <div class="t2">Solo si el buzón automático falla — selecciona o arrastra uno o varios archivos .json que te hayan mandado</div>
+  </div>
+  <input type="file" id="fileInput" accept="application/json,.json" multiple>
+
   <div id="dashboardWrap" style="display:none;">
-    <div class="tg-box" id="totalGeneral"></div>
-    <button class="btn-wa" id="btnCopyDaySummary">📋 Copiar resumen del día (WhatsApp)</button>
     <div class="section-title">Desembolsos por día — semana actual, todas las sucursales</div>
     <div class="day-chips" id="dayChips"></div>
     <div class="cubeta-detail" id="dayDetail" style="display:none;"></div>
@@ -294,7 +296,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.27.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.28.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1356,6 +1358,11 @@
     $('#btnExportBundle').style.display = n ? '' : 'none';
     $('#emptyState').style.display = n ? 'none' : '';
     $('#dashboardWrap').style.display = n ? '' : 'none';
+    // totalGeneral y el botón de WhatsApp ya no viven dentro de dashboardWrap
+    // (se reacomodaron en la pantalla), así que controlan su propio show/hide
+    // con la misma condición de siempre: solo si ya hay algo cargado.
+    $('#totalGeneral').style.display = n ? '' : 'none';
+    $('#btnCopyDaySummary').style.display = n ? '' : 'none';
     if(n){
       renderTotalGeneral();
       renderDayChips();
