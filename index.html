@@ -229,6 +229,10 @@
   .aseso-meta{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
   .aseso-meta.baja{color:var(--danger);font-weight:700;}
   .aseso-meta.override{font-style:italic;}
+  .gerente-row{background:var(--m1-soft);margin:0 -4px 2px;padding:5px 4px;border-radius:6px;border-bottom:none;flex-wrap:wrap;row-gap:3px;}
+  .gerente-row .aseso-name{white-space:normal;overflow:visible;text-overflow:clip;flex:1 1 100%;}
+  .gerente-row .aseso-meta-group{flex-basis:100%;flex-wrap:wrap;}
+  .aseso-role{font-size:10px;font-weight:600;color:var(--m1);text-transform:uppercase;letter-spacing:.03em;}
   .aseso-edit-btn{font-size:11px;color:var(--m1);background:none;border:1px dashed var(--line);border-radius:6px;padding:2px 6px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;}
   .aseso-edit-btn:active{opacity:.7;}
   .aseso-empty{font-size:12px;color:var(--muted);padding:6px 0;}
@@ -321,7 +325,7 @@
     <div id="branchesWrap"></div>
   </div>
 
-  <button class="archive-toggle" id="asesoresTitle" style="display:none;">👥 Asesores por sucursal <span id="asesoresToggleChev">▾</span></button>
+  <button class="archive-toggle" id="asesoresTitle" style="display:none;">👥 Equipo por sucursal (gerente y asesores) <span id="asesoresToggleChev">▾</span></button>
   <div class="archive-box" id="asesoresBox" style="display:none;">
     <div id="asesoresList"></div>
   </div>
@@ -337,7 +341,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.31.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.32.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1228,22 +1232,51 @@
     saveBranches(branches);
   }
 
+  // La Agenda del Gerente no le pide al gerente su propia fecha de ingreso ni
+  // cumpleaños — esa info simplemente no existe en ningún reporte. Así que para
+  // los gerentes (a diferencia de los asesores) el director es la ÚNICA fuente:
+  // se guarda directo en la sucursal, en gerenteInfo.
+  function setGerenteInfo(sucursal, field, value){
+    const data = branches[sucursal];
+    if(!data) return;
+    if(!data.gerenteInfo) data.gerenteInfo = {};
+    data.gerenteInfo[field] = value;
+    saveBranches(branches);
+  }
+
   function renderAsesoresSection(){
     const wrap = $('#asesoresList');
     const today = todayStr();
     const entries = Object.entries(branches)
-      .filter(([_,data])=> Array.isArray(data.asesores))
       .sort((a,b)=> (a[1].sucursal||a[0]).localeCompare(b[1].sucursal||b[0]));
     if(!entries.length){
-      wrap.innerHTML = `<div class="aseso-empty">Ningún reporte cargado trae todavía el listado de Mi Equipo.</div>`;
+      wrap.innerHTML = `<div class="aseso-empty">Todavía no cargas ninguna sucursal.</div>`;
       return;
     }
     wrap.innerHTML = entries.map(([sucursal, data])=>{
-      const lista = [...data.asesores].sort((x,y)=>{
+      const lista = Array.isArray(data.asesores) ? [...data.asesores].sort((x,y)=>{
         if((x.activo!==false)!==(y.activo!==false)) return x.activo!==false ? -1 : 1;
         return (x.name||'').localeCompare(y.name||'');
-      });
+      }) : [];
       const activos = lista.filter(a=>a.activo!==false).length;
+      const gi = data.gerenteInfo || {};
+      const gMetaBits = [];
+      if(!gi.fechaAlta){
+        gMetaBits.push(`<span class="aseso-meta">sin fecha de ingreso</span><button type="button" class="aseso-edit-btn" data-action="edit-gerente-alta" data-suc="${escapeHTML(sucursal)}">📅 poner</button>`);
+      } else {
+        const dias = antiguedadDiasConsola(gi.fechaAlta, today);
+        gMetaBits.push(`<span class="aseso-meta">ingreso ${fmtDate(gi.fechaAlta)} · ${dias}d</span><button type="button" class="aseso-edit-btn" data-action="edit-gerente-alta" data-suc="${escapeHTML(sucursal)}">✏️</button>`);
+      }
+      if(gi.fechaNacimiento){
+        const [,m,d] = gi.fechaNacimiento.split('-');
+        gMetaBits.push(`<span class="aseso-meta">🎂 ${d}/${m}</span><button type="button" class="aseso-edit-btn" data-action="edit-gerente-cumple" data-suc="${escapeHTML(sucursal)}">✏️</button>`);
+      } else {
+        gMetaBits.push(`<button type="button" class="aseso-edit-btn" data-action="edit-gerente-cumple" data-suc="${escapeHTML(sucursal)}">🎂 poner</button>`);
+      }
+      const gerenteRowHTML = `<div class="aseso-row gerente-row">
+        <span class="aseso-name">👤 ${escapeHTML(data.gerente||'Gerente')} <span class="aseso-role">(gerente)</span></span>
+        <span class="aseso-meta-group">${gMetaBits.join('')}</span>
+      </div>`;
       const rowsHTML = lista.length ? lista.map(raw=>{
         const a = effectiveAsesor(data, raw);
         const key = asesorKeyOf(raw);
@@ -1274,9 +1307,40 @@
           <span>${escapeHTML(data.sucursal||sucursal)}</span>
           <span class="aseso-suc-count">${activos} activo(s)</span>
         </div>
+        ${gerenteRowHTML}
         ${rowsHTML}
       </div>`;
     }).join('');
+    wrap.querySelectorAll('[data-action="edit-gerente-alta"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const suc = btn.dataset.suc;
+        const data = branches[suc];
+        if(!data) return;
+        const current = (data.gerenteInfo && data.gerenteInfo.fechaAlta) || '';
+        const val = prompt(`Fecha de ingreso de ${data.gerente||'el gerente'} (AAAA-MM-DD):`, current);
+        if(val===null) return;
+        const trimmed = val.trim();
+        if(trimmed && !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)){ toast('Formato de fecha no válido — usa AAAA-MM-DD'); return; }
+        setGerenteInfo(suc, 'fechaAlta', trimmed || null);
+        renderAsesoresSection();
+        renderDirectorDatesBanner();
+      });
+    });
+    wrap.querySelectorAll('[data-action="edit-gerente-cumple"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const suc = btn.dataset.suc;
+        const data = branches[suc];
+        if(!data) return;
+        const current = (data.gerenteInfo && data.gerenteInfo.fechaNacimiento) || '';
+        const val = prompt(`Fecha de cumpleaños de ${data.gerente||'el gerente'} (AAAA-MM-DD — el año puede ser aproximado, solo se usa el día y el mes):`, current);
+        if(val===null) return;
+        const trimmed = val.trim();
+        if(trimmed && !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)){ toast('Formato de fecha no válido — usa AAAA-MM-DD'); return; }
+        setGerenteInfo(suc, 'fechaNacimiento', trimmed || null);
+        renderAsesoresSection();
+        renderDirectorDatesBanner();
+      });
+    });
     wrap.querySelectorAll('[data-action="edit-alta"]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const suc = btn.dataset.suc, key = btn.dataset.key;
@@ -1330,19 +1394,34 @@
   function proximosEventosDirector(hoyStr){
     const eventos = [];
     Object.entries(branches).forEach(([sucursal, data])=>{
-      if(!Array.isArray(data.asesores)) return;
       const nombreSuc = data.sucursal || sucursal;
-      data.asesores.filter(raw=>raw.activo!==false).forEach(raw=>{
-        const a = effectiveAsesor(data, raw);
-        if(a.fechaNacimiento){
-          const oc = proximaOcurrencia(a.fechaNacimiento, hoyStr);
-          if(oc && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'cumple', nombre:a.name, sucursal:nombreSuc, ...oc});
+      if(Array.isArray(data.asesores)){
+        data.asesores.filter(raw=>raw.activo!==false).forEach(raw=>{
+          const a = effectiveAsesor(data, raw);
+          if(a.fechaNacimiento){
+            const oc = proximaOcurrencia(a.fechaNacimiento, hoyStr);
+            if(oc && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'cumple', nombre:a.name, sucursal:nombreSuc, ...oc});
+          }
+          if(a.fechaAlta){
+            const oc = proximaOcurrencia(a.fechaAlta, hoyStr);
+            if(oc && oc.anios>=1 && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'aniversario', nombre:a.name, sucursal:nombreSuc, ...oc});
+          }
+        });
+      }
+      // El gerente de la sucursal — su fecha de ingreso/cumpleaños solo existe si
+      // el director la capturó (ver setGerenteInfo), no viene en ningún reporte.
+      const gi = data.gerenteInfo;
+      if(gi){
+        const nombreGerente = data.gerente || 'Gerente';
+        if(gi.fechaNacimiento){
+          const oc = proximaOcurrencia(gi.fechaNacimiento, hoyStr);
+          if(oc && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'cumple', nombre:nombreGerente, sucursal:nombreSuc, rol:'gerente', ...oc});
         }
-        if(a.fechaAlta){
-          const oc = proximaOcurrencia(a.fechaAlta, hoyStr);
-          if(oc && oc.anios>=1 && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'aniversario', nombre:a.name, sucursal:nombreSuc, ...oc});
+        if(gi.fechaAlta){
+          const oc = proximaOcurrencia(gi.fechaAlta, hoyStr);
+          if(oc && oc.anios>=1 && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'aniversario', nombre:nombreGerente, sucursal:nombreSuc, rol:'gerente', ...oc});
         }
-      });
+      }
     });
     eventos.sort((x,y)=> x.diasFaltan - y.diasFaltan);
     return eventos;
@@ -1354,10 +1433,11 @@
     banner.style.display = '';
     banner.innerHTML = eventos.map(e=>{
       const cuando = e.diasFaltan===0 ? 'hoy' : (e.diasFaltan===1 ? 'mañana' : `en ${e.diasFaltan} días`);
+      const etiqueta = e.rol==='gerente' ? `gerente, ${e.sucursal}` : e.sucursal;
       if(e.tipo==='cumple'){
-        return `<span class="tdb-row">🎂 <b>${escapeHTML(e.nombre)}</b> (${escapeHTML(e.sucursal)}) cumple años ${cuando}.</span>`;
+        return `<span class="tdb-row">🎂 <b>${escapeHTML(e.nombre)}</b> (${escapeHTML(etiqueta)}) cumple años ${cuando}.</span>`;
       }
-      return `<span class="tdb-row">🎉 <b>${escapeHTML(e.nombre)}</b> (${escapeHTML(e.sucursal)}) cumple ${e.anios} año(s) en la empresa ${cuando}.</span>`;
+      return `<span class="tdb-row">🎉 <b>${escapeHTML(e.nombre)}</b> (${escapeHTML(etiqueta)}) cumple ${e.anios} año(s) en la empresa ${cuando}.</span>`;
     }).join('');
   }
 
@@ -1638,8 +1718,10 @@
     $('#archiveTitle').classList.toggle('open', archiveOpen);
     $('#archiveBox').style.display = (hasArchive && archiveOpen) ? '' : 'none';
     if(hasArchive){ refreshArchiveBranchOptions(); if(archiveOpen) renderArchiveResults(); }
-    // Asesores por sucursal: solo aparece si algún reporte ya trae Mi Equipo.
-    const hasAsesores = Object.values(branches).some(d=>Array.isArray(d.asesores));
+    // Asesores por sucursal: aparece en cuanto haya al menos una sucursal cargada
+    // (ahí vive también la fecha de ingreso/cumpleaños de cada gerente, que el
+    // director puede capturar aunque el reporte no traiga todavía Mi Equipo).
+    const hasAsesores = Object.keys(branches).length>0;
     $('#asesoresTitle').style.display = hasAsesores ? '' : 'none';
     $('#asesoresTitle').classList.toggle('open', asesoresOpen);
     $('#asesoresBox').style.display = (hasAsesores && asesoresOpen) ? '' : 'none';
