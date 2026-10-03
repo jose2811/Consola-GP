@@ -54,17 +54,20 @@
   .empty-state b{color:var(--ink);display:block;font-size:15px;margin-bottom:6px;}
 
   .tg-box{background:var(--ink);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;}
+  .team-dates-banner{background:var(--warn-soft);border:1px solid #F0DCA0;border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:var(--ink);line-height:1.5;}
+  .team-dates-banner b{color:var(--warn);}
+  .tdb-row{display:block;}
+  .tdb-row + .tdb-row{margin-top:2px;}
   .last-updated-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px 4px;margin-bottom:12px;}
   .last-updated-title{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
-  .lu-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;font-family:inherit;color:inherit;}
+  .lu-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;font-family:inherit;color:inherit;}
   .lu-row:last-of-type{border-bottom:none;}
   .lu-row:active{opacity:.7;}
-  .lu-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .lu-time{font-size:11.5px;white-space:nowrap;flex-shrink:0;}
+  .lu-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+  .lu-time{font-size:12.5px;white-space:nowrap;flex-shrink:0;}
   .lu-time.lu-fresh{color:var(--ok);}
   .lu-time.lu-stale{color:var(--danger);font-weight:700;}
-  .lu-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
-  .lu-asesores{font-size:11px;font-weight:700;color:var(--muted);background:var(--neutral-soft);border-radius:99px;padding:2px 7px;white-space:nowrap;}
+  .lu-asesores{font-size:11px;font-weight:700;color:var(--muted);background:var(--neutral-soft);border-radius:99px;padding:2px 7px;white-space:nowrap;flex-shrink:0;}
   .btn-wa{display:block;width:100%;background:var(--m4);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:16px;}
   .btn-wa:active{opacity:.85;}
   .btn-refresh{display:block;width:100%;background:var(--m1);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:10px;}
@@ -222,8 +225,12 @@
   .aseso-row:last-child{border-bottom:none;}
   .aseso-row.inactive{opacity:.55;}
   .aseso-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .aseso-meta-group{display:flex;align-items:center;gap:9px;flex-shrink:0;}
   .aseso-meta{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
   .aseso-meta.baja{color:var(--danger);font-weight:700;}
+  .aseso-meta.override{font-style:italic;}
+  .aseso-edit-btn{font-size:11px;color:var(--m1);background:none;border:1px dashed var(--line);border-radius:6px;padding:2px 6px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;}
+  .aseso-edit-btn:active{opacity:.7;}
   .aseso-empty{font-size:12px;color:var(--muted);padding:6px 0;}
   .archive-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;}
   .archive-filters{display:flex;gap:6px;margin-bottom:6px;}
@@ -284,6 +291,8 @@
 
   <div class="tg-box" id="totalGeneral" style="display:none;"></div>
 
+  <div class="team-dates-banner" id="directorDatesBanner" style="display:none;"></div>
+
   <div class="last-updated-box" id="lastUpdatedWrap" style="display:none;">
     <div class="last-updated-title">Última actualización por sucursal</div>
     <div id="lastUpdatedList"></div>
@@ -328,7 +337,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.30.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.31.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1174,11 +1183,9 @@
     rows.sort((a,b)=> a.sortTime - b.sortTime);
     list.innerHTML = rows.map(r=>`
       <button type="button" class="lu-row" data-jump="${escapeHTML(r.sucursal)}">
+        ${r.nAsesores===null ? '' : `<span class="lu-asesores" title="Asesores activos capturados en Mi Equipo">👥 ${r.nAsesores}</span>`}
         <span class="lu-name">${escapeHTML(r.nombre)}</span>
-        <span class="lu-right">
-          ${r.nAsesores===null ? '' : `<span class="lu-asesores" title="Asesores activos capturados en Mi Equipo">👥 ${r.nAsesores}</span>`}
-          <span class="lu-time ${r.isFresh?'lu-fresh':'lu-stale'}">${r.isFresh?'✓':'⚠'} ${r.exportedStr}</span>
-        </span>
+        <span class="lu-time ${r.isFresh?'lu-fresh':'lu-stale'}">${r.isFresh?'✓':'⚠'} ${r.exportedStr}</span>
       </button>`).join('');
     list.querySelectorAll('[data-jump]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -1195,6 +1202,32 @@
     const a = new Date(fechaAlta+'T00:00:00'), b = new Date(refDateStr+'T00:00:00');
     return Math.floor((b-a) / 86400000);
   }
+
+  // No todos los gerentes capturan fecha de alta / cumpleaños de su equipo — para
+  // que esa información no dependa de que cada gerente la ponga, el director puede
+  // capturarla él mismo aquí. Se guarda aparte (en "overrides" de cada sucursal) y
+  // solo se usa mientras el gerente no haya puesto su propio dato; si el gerente
+  // después captura el suyo, ese manda (es la fuente verdadera).
+  function asesorKeyOf(a){ return a.id || a.name; }
+  function effectiveAsesor(data, a){
+    const ov = (data.overrides && data.overrides[asesorKeyOf(a)]) || {};
+    return {
+      ...a,
+      fechaAlta: a.fechaAlta || ov.fechaAlta || null,
+      fechaNacimiento: a.fechaNacimiento || ov.fechaNacimiento || null,
+      _altaIsOverride: !a.fechaAlta && !!ov.fechaAlta,
+      _cumpleIsOverride: !a.fechaNacimiento && !!ov.fechaNacimiento,
+    };
+  }
+  function setAsesorOverride(sucursal, asesorKey, field, value){
+    const data = branches[sucursal];
+    if(!data) return;
+    if(!data.overrides) data.overrides = {};
+    if(!data.overrides[asesorKey]) data.overrides[asesorKey] = {};
+    data.overrides[asesorKey][field] = value;
+    saveBranches(branches);
+  }
+
   function renderAsesoresSection(){
     const wrap = $('#asesoresList');
     const today = todayStr();
@@ -1211,19 +1244,29 @@
         return (x.name||'').localeCompare(y.name||'');
       });
       const activos = lista.filter(a=>a.activo!==false).length;
-      const rowsHTML = lista.length ? lista.map(a=>{
-        let metaHTML;
+      const rowsHTML = lista.length ? lista.map(raw=>{
+        const a = effectiveAsesor(data, raw);
+        const key = asesorKeyOf(raw);
+        const metaBits = [];
         if(a.activo===false){
-          metaHTML = `<span class="aseso-meta baja">de baja</span>`;
+          metaBits.push(`<span class="aseso-meta baja">de baja</span>`);
         } else if(!a.fechaAlta){
-          metaHTML = `<span class="aseso-meta">sin fecha de alta</span>`;
+          metaBits.push(`<span class="aseso-meta">sin fecha de alta</span><button type="button" class="aseso-edit-btn" data-action="edit-alta" data-suc="${escapeHTML(sucursal)}" data-key="${escapeHTML(key)}">📅 poner</button>`);
         } else {
           const dias = antiguedadDiasConsola(a.fechaAlta, today);
-          metaHTML = `<span class="aseso-meta">alta ${fmtDate(a.fechaAlta)} · ${dias}d</span>`;
+          metaBits.push(`<span class="aseso-meta${a._altaIsOverride?' override':''}">alta ${fmtDate(a.fechaAlta)} · ${dias}d${a._altaIsOverride?' (tú)':''}</span><button type="button" class="aseso-edit-btn" data-action="edit-alta" data-suc="${escapeHTML(sucursal)}" data-key="${escapeHTML(key)}">✏️</button>`);
+        }
+        // El cumpleaños es independiente de la fecha de alta — si la capturaron,
+        // aparece siempre junto a lo anterior, nunca en su lugar.
+        if(a.fechaNacimiento){
+          const [,m,d] = a.fechaNacimiento.split('-');
+          metaBits.push(`<span class="aseso-meta${a._cumpleIsOverride?' override':''}">🎂 ${d}/${m}${a._cumpleIsOverride?' (tú)':''}</span><button type="button" class="aseso-edit-btn" data-action="edit-cumple" data-suc="${escapeHTML(sucursal)}" data-key="${escapeHTML(key)}">✏️</button>`);
+        } else if(a.activo!==false){
+          metaBits.push(`<button type="button" class="aseso-edit-btn" data-action="edit-cumple" data-suc="${escapeHTML(sucursal)}" data-key="${escapeHTML(key)}">🎂 poner</button>`);
         }
         return `<div class="aseso-row${a.activo===false?' inactive':''}">
           <span class="aseso-name">${escapeHTML(a.name||'(sin nombre)')}</span>
-          ${metaHTML}
+          <span class="aseso-meta-group">${metaBits.join('')}</span>
         </div>`;
       }).join('') : `<div class="aseso-empty">Sin asesores capturados todavía.</div>`;
       return `<div class="aseso-suc">
@@ -1233,6 +1276,88 @@
         </div>
         ${rowsHTML}
       </div>`;
+    }).join('');
+    wrap.querySelectorAll('[data-action="edit-alta"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const suc = btn.dataset.suc, key = btn.dataset.key;
+        const data = branches[suc];
+        const raw = data.asesores.find(x=>asesorKeyOf(x)===key);
+        if(!raw) return;
+        const current = (data.overrides && data.overrides[key] && data.overrides[key].fechaAlta) || raw.fechaAlta || '';
+        const val = prompt(`Fecha de alta de ${raw.name} (AAAA-MM-DD):`, current);
+        if(val===null) return;
+        const trimmed = val.trim();
+        if(trimmed && !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)){ toast('Formato de fecha no válido — usa AAAA-MM-DD'); return; }
+        setAsesorOverride(suc, key, 'fechaAlta', trimmed || null);
+        renderAsesoresSection();
+        renderDirectorDatesBanner();
+      });
+    });
+    wrap.querySelectorAll('[data-action="edit-cumple"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const suc = btn.dataset.suc, key = btn.dataset.key;
+        const data = branches[suc];
+        const raw = data.asesores.find(x=>asesorKeyOf(x)===key);
+        if(!raw) return;
+        const current = (data.overrides && data.overrides[key] && data.overrides[key].fechaNacimiento) || raw.fechaNacimiento || '';
+        const val = prompt(`Fecha de cumpleaños de ${raw.name} (AAAA-MM-DD — el año puede ser aproximado, solo se usa el día y el mes):`, current);
+        if(val===null) return;
+        const trimmed = val.trim();
+        if(trimmed && !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)){ toast('Formato de fecha no válido — usa AAAA-MM-DD'); return; }
+        setAsesorOverride(suc, key, 'fechaNacimiento', trimmed || null);
+        renderAsesoresSection();
+        renderDirectorDatesBanner();
+      });
+    });
+  }
+
+  // Recordatorios de cumpleaños/aniversarios, agregados de todas las sucursales
+  // cargadas (misma lógica que la Agenda del Gerente: ventana de 7 días, aniversario
+  // cuenta a partir de 1 año) — usa fecha de alta/cumpleaños efectiva (lo que haya
+  // puesto el gerente, o lo que el director haya capturado si el gerente no lo hizo).
+  const RECORDATORIO_DIAS_ANTES = 7;
+  function proximaOcurrencia(dateStr, hoyStr){
+    if(!dateStr) return null;
+    const [y,m,d] = dateStr.split('-').map(Number);
+    const hoy = new Date(hoyStr+'T00:00:00');
+    const hoySinHora = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    let next = new Date(hoy.getFullYear(), m-1, d);
+    if(next < hoySinHora) next = new Date(hoy.getFullYear()+1, m-1, d);
+    const diasFaltan = Math.round((next - hoySinHora) / 86400000);
+    const anios = next.getFullYear() - y;
+    return { diasFaltan, anios };
+  }
+  function proximosEventosDirector(hoyStr){
+    const eventos = [];
+    Object.entries(branches).forEach(([sucursal, data])=>{
+      if(!Array.isArray(data.asesores)) return;
+      const nombreSuc = data.sucursal || sucursal;
+      data.asesores.filter(raw=>raw.activo!==false).forEach(raw=>{
+        const a = effectiveAsesor(data, raw);
+        if(a.fechaNacimiento){
+          const oc = proximaOcurrencia(a.fechaNacimiento, hoyStr);
+          if(oc && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'cumple', nombre:a.name, sucursal:nombreSuc, ...oc});
+        }
+        if(a.fechaAlta){
+          const oc = proximaOcurrencia(a.fechaAlta, hoyStr);
+          if(oc && oc.anios>=1 && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'aniversario', nombre:a.name, sucursal:nombreSuc, ...oc});
+        }
+      });
+    });
+    eventos.sort((x,y)=> x.diasFaltan - y.diasFaltan);
+    return eventos;
+  }
+  function renderDirectorDatesBanner(){
+    const banner = $('#directorDatesBanner');
+    const eventos = proximosEventosDirector(todayStr());
+    if(!eventos.length){ banner.style.display = 'none'; return; }
+    banner.style.display = '';
+    banner.innerHTML = eventos.map(e=>{
+      const cuando = e.diasFaltan===0 ? 'hoy' : (e.diasFaltan===1 ? 'mañana' : `en ${e.diasFaltan} días`);
+      if(e.tipo==='cumple'){
+        return `<span class="tdb-row">🎂 <b>${escapeHTML(e.nombre)}</b> (${escapeHTML(e.sucursal)}) cumple años ${cuando}.</span>`;
+      }
+      return `<span class="tdb-row">🎉 <b>${escapeHTML(e.nombre)}</b> (${escapeHTML(e.sucursal)}) cumple ${e.anios} año(s) en la empresa ${cuando}.</span>`;
     }).join('');
   }
 
@@ -1492,12 +1617,14 @@
     if(n){
       renderTotalGeneral();
       renderLastUpdated();
+      renderDirectorDatesBanner();
       renderDayChips();
       renderCubetaGrid();
       STAGE_TILES.forEach(renderStageTile);
       renderBranches();
     } else {
       $('#lastUpdatedWrap').style.display = 'none';
+      $('#directorDatesBanner').style.display = 'none';
     }
     // Caja de carga: grande solo la primera vez (mientras no hay nada cargado);
     // en cuanto ya trabajas con la Consola día a día, se vuelve una línea chica.
