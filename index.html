@@ -63,6 +63,8 @@
   .lu-time{font-size:11.5px;white-space:nowrap;flex-shrink:0;}
   .lu-time.lu-fresh{color:var(--ok);}
   .lu-time.lu-stale{color:var(--danger);font-weight:700;}
+  .lu-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+  .lu-asesores{font-size:11px;font-weight:700;color:var(--muted);background:var(--neutral-soft);border-radius:99px;padding:2px 7px;white-space:nowrap;}
   .btn-wa{display:block;width:100%;background:var(--m4);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:16px;}
   .btn-wa:active{opacity:.85;}
   .btn-refresh{display:block;width:100%;background:var(--m1);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:10px;}
@@ -210,8 +212,19 @@
   .alert-empty{font-size:12.5px;color:var(--muted);font-style:italic;padding:10px 2px;}
 
   .archive-toggle{width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 14px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:inherit;margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center;}
-  .archive-toggle #archiveToggleChev{transition:transform .15s ease;}
-  .archive-toggle.open #archiveToggleChev{transform:rotate(180deg);}
+  .archive-toggle #archiveToggleChev, .archive-toggle #asesoresToggleChev{transition:transform .15s ease;}
+  .archive-toggle.open #archiveToggleChev, .archive-toggle.open #asesoresToggleChev{transform:rotate(180deg);}
+  .aseso-suc{margin-bottom:14px;}
+  .aseso-suc:last-child{margin-bottom:0;}
+  .aseso-suc-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--ink);padding:4px 0 6px;border-bottom:1px solid var(--line);margin-bottom:6px;}
+  .aseso-suc-count{font-weight:700;color:var(--muted);font-size:11px;}
+  .aseso-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;font-size:12.5px;border-bottom:1px dashed var(--line);}
+  .aseso-row:last-child{border-bottom:none;}
+  .aseso-row.inactive{opacity:.55;}
+  .aseso-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .aseso-meta{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
+  .aseso-meta.baja{color:var(--danger);font-weight:700;}
+  .aseso-empty{font-size:12px;color:var(--muted);padding:6px 0;}
   .archive-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;}
   .archive-filters{display:flex;gap:6px;margin-bottom:6px;}
   .archive-filter-select{flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 9px;font-size:12.5px;font-family:inherit;min-width:0;}
@@ -299,6 +312,11 @@
     <div id="branchesWrap"></div>
   </div>
 
+  <button class="archive-toggle" id="asesoresTitle" style="display:none;">👥 Asesores por sucursal <span id="asesoresToggleChev">▾</span></button>
+  <div class="archive-box" id="asesoresBox" style="display:none;">
+    <div id="asesoresList"></div>
+  </div>
+
   <button class="archive-toggle" id="archiveTitle" style="display:none;">📂 Archivo histórico — Desembolsados y Rechazados <span id="archiveToggleChev">▾</span></button>
   <div class="archive-box" id="archiveBox" style="display:none;">
     <div class="archive-filters">
@@ -310,7 +328,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.29.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.30.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -554,6 +572,7 @@
   function saveArchive(a){ lsSet(ARCHIVE_KEY, JSON.stringify(a)); touchLastModified(); }
   let archive = loadArchive();
   let archiveOpen = false; // colapsado por default — no queremos que se sienta como lista infinita
+  let asesoresOpen = false; // igual: colapsado por default, hasta abajo, no estorba el dashboard
   let archiveCommentsOpen = {}; // solo en memoria — qué registros tienen su bitácora expandida
   function mergeIntoArchive(sucursal, gerente, crec){
     const existingKeys = new Set(archive.map(a=>a.sucursal+'::'+a.id));
@@ -1146,13 +1165,20 @@
       const exportedAt = data.exportedAt ? new Date(data.exportedAt) : null;
       const exportedStr = exportedAt ? exportedAt.toLocaleString('es-MX',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'sin envíos';
       const sortTime = exportedAt ? exportedAt.getTime() : -Infinity; // sin ningún envío = siempre hasta arriba
-      return { sucursal, nombre: data.sucursal||sucursal, isFresh, exportedStr, sortTime };
+      // Solo mostramos el numerito si el reporte ya trae el campo asesores — los
+      // reportes viejos (de antes de "Mi Equipo") no lo traen, y 0 no es lo mismo
+      // que "todavía no sabemos".
+      const nAsesores = Array.isArray(data.asesores) ? data.asesores.filter(a=>a.activo!==false).length : null;
+      return { sucursal, nombre: data.sucursal||sucursal, isFresh, exportedStr, sortTime, nAsesores };
     });
     rows.sort((a,b)=> a.sortTime - b.sortTime);
     list.innerHTML = rows.map(r=>`
       <button type="button" class="lu-row" data-jump="${escapeHTML(r.sucursal)}">
         <span class="lu-name">${escapeHTML(r.nombre)}</span>
-        <span class="lu-time ${r.isFresh?'lu-fresh':'lu-stale'}">${r.isFresh?'✓':'⚠'} ${r.exportedStr}</span>
+        <span class="lu-right">
+          ${r.nAsesores===null ? '' : `<span class="lu-asesores" title="Asesores activos capturados en Mi Equipo">👥 ${r.nAsesores}</span>`}
+          <span class="lu-time ${r.isFresh?'lu-fresh':'lu-stale'}">${r.isFresh?'✓':'⚠'} ${r.exportedStr}</span>
+        </span>
       </button>`).join('');
     list.querySelectorAll('[data-jump]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -1160,6 +1186,54 @@
         if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
       });
     });
+  }
+
+  // Listado completo de asesores por sucursal — colapsado por default, solo para
+  // cuando el numerito de arriba no cuadra y hay que ver quién exactamente está raro.
+  function antiguedadDiasConsola(fechaAlta, refDateStr){
+    if(!fechaAlta) return null;
+    const a = new Date(fechaAlta+'T00:00:00'), b = new Date(refDateStr+'T00:00:00');
+    return Math.floor((b-a) / 86400000);
+  }
+  function renderAsesoresSection(){
+    const wrap = $('#asesoresList');
+    const today = todayStr();
+    const entries = Object.entries(branches)
+      .filter(([_,data])=> Array.isArray(data.asesores))
+      .sort((a,b)=> (a[1].sucursal||a[0]).localeCompare(b[1].sucursal||b[0]));
+    if(!entries.length){
+      wrap.innerHTML = `<div class="aseso-empty">Ningún reporte cargado trae todavía el listado de Mi Equipo.</div>`;
+      return;
+    }
+    wrap.innerHTML = entries.map(([sucursal, data])=>{
+      const lista = [...data.asesores].sort((x,y)=>{
+        if((x.activo!==false)!==(y.activo!==false)) return x.activo!==false ? -1 : 1;
+        return (x.name||'').localeCompare(y.name||'');
+      });
+      const activos = lista.filter(a=>a.activo!==false).length;
+      const rowsHTML = lista.length ? lista.map(a=>{
+        let metaHTML;
+        if(a.activo===false){
+          metaHTML = `<span class="aseso-meta baja">de baja</span>`;
+        } else if(!a.fechaAlta){
+          metaHTML = `<span class="aseso-meta">sin fecha de alta</span>`;
+        } else {
+          const dias = antiguedadDiasConsola(a.fechaAlta, today);
+          metaHTML = `<span class="aseso-meta">alta ${fmtDate(a.fechaAlta)} · ${dias}d</span>`;
+        }
+        return `<div class="aseso-row${a.activo===false?' inactive':''}">
+          <span class="aseso-name">${escapeHTML(a.name||'(sin nombre)')}</span>
+          ${metaHTML}
+        </div>`;
+      }).join('') : `<div class="aseso-empty">Sin asesores capturados todavía.</div>`;
+      return `<div class="aseso-suc">
+        <div class="aseso-suc-head">
+          <span>${escapeHTML(data.sucursal||sucursal)}</span>
+          <span class="aseso-suc-count">${activos} activo(s)</span>
+        </div>
+        ${rowsHTML}
+      </div>`;
+    }).join('');
   }
 
   function renderBranches(){
@@ -1396,6 +1470,12 @@
     $('#archiveBox').style.display = archiveOpen ? '' : 'none';
     if(archiveOpen) renderArchiveResults();
   });
+  $('#asesoresTitle').addEventListener('click', ()=>{
+    asesoresOpen = !asesoresOpen;
+    $('#asesoresTitle').classList.toggle('open', asesoresOpen);
+    $('#asesoresBox').style.display = asesoresOpen ? '' : 'none';
+    if(asesoresOpen) renderAsesoresSection();
+  });
 
   function render(){
     const n = Object.keys(branches).length;
@@ -1431,6 +1511,12 @@
     $('#archiveTitle').classList.toggle('open', archiveOpen);
     $('#archiveBox').style.display = (hasArchive && archiveOpen) ? '' : 'none';
     if(hasArchive){ refreshArchiveBranchOptions(); if(archiveOpen) renderArchiveResults(); }
+    // Asesores por sucursal: solo aparece si algún reporte ya trae Mi Equipo.
+    const hasAsesores = Object.values(branches).some(d=>Array.isArray(d.asesores));
+    $('#asesoresTitle').style.display = hasAsesores ? '' : 'none';
+    $('#asesoresTitle').classList.toggle('open', asesoresOpen);
+    $('#asesoresBox').style.display = (hasAsesores && asesoresOpen) ? '' : 'none';
+    if(hasAsesores && asesoresOpen) renderAsesoresSection();
   }
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
