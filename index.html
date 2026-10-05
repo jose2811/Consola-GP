@@ -189,9 +189,6 @@
   .mm-chip.warn{background:var(--warn-soft);color:var(--warn);}
   .mm-chip.low{background:var(--danger-soft);color:var(--danger);}
   .mm-chip.empty{background:var(--neutral-soft);color:var(--muted);}
-  .mm-row-approvals{flex-wrap:wrap;row-gap:4px;}
-  .mm-row-approvals .mm-label{flex:1 1 auto;}
-  .mm-chipgroup{flex-basis:100%;display:flex;justify-content:flex-end;gap:6px;}
 
   .branch-crec{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;padding-top:8px;border-top:1px solid var(--line);}
 
@@ -350,7 +347,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.33.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.34.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -622,6 +619,9 @@
   }
 
   function pctOf(real, compromiso){ if(!compromiso) return null; return Math.round(((real||0)/compromiso)*100); }
+  // Para Approvals (cover y meta) José pidió un decimal — con los montos chicos
+  // de este indicador, redondear al entero perdía demasiada precisión.
+  function pctOf1(real, compromiso){ if(!compromiso) return null; return (((real||0)/compromiso)*100).toFixed(1); }
   function gapClass(real, compromiso){
     if(!compromiso) return 'empty';
     const pct = (real||0)/compromiso;
@@ -814,19 +814,20 @@
       if(key==='prospeccion'){
         // Approvals: el total capturado SIEMPRE es el cover mínimo (2× asesores);
         // la meta (3×) se deriva de ese mismo número, sin tocar lo que se envía
-        // por WhatsApp (eso sigue usando únicamente el cover).
+        // por WhatsApp (eso sigue usando únicamente el cover). Dos líneas
+        // separadas (cover / meta), cada una con su propio % a un decimal.
         const cover = d.total||0;
         const meta = approvalsMetaFromCover(cover);
-        const pctCover = pctOf(d.real, cover);
-        const pctMeta = pctOf(d.real, meta);
-        return `<div class="tg-sec-row">
-          <span class="tg-sec-label">${label}</span>
+        const pctCover = pctOf1(d.real, cover);
+        const pctMeta = pctOf1(d.real, meta);
+        const row = (sub, total, pct) => `<div class="tg-sec-row">
+          <span class="tg-sec-label">${label} ${sub}</span>
           <span class="tg-sec-right">
-            <span class="tg-sec-val">${fmtN(d.real)} / ${fmtN(cover)}</span>
-            <span class="tg-sec-chip ${gapClass(d.real,cover)}" title="Cumplimiento del cover mínimo (2× asesores)">cover ${pctCover===null?'—':pctCover+'%'}</span>
-            <span class="tg-sec-chip ${gapClass(d.real,meta)}" title="Cumplimiento de la meta (3× asesores, ${meta})">meta ${pctMeta===null?'—':pctMeta+'%'}</span>
+            <span class="tg-sec-val">${fmtN(d.real)} / ${fmtN(total)}</span>
+            <span class="tg-sec-chip ${gapClass(d.real,total)}">${pct===null?'—':pct+'%'}</span>
           </span>
         </div>`;
+        return row('cover', cover, pctCover) + row('meta', meta, pctMeta);
       }
       if(m.noCompromiso){
         // Fichas del día / Mora 1-7: sin compromiso — se muestra Real/Total y su %.
@@ -1504,18 +1505,17 @@
           if(m.key==='prospeccion'){
             // Approvals: el total capturado es el cover mínimo (2× asesores) — la
             // meta (3×) se deriva del mismo número, sin pedir un segundo registro.
+            // Dos líneas separadas (cover / meta), % a un decimal.
             const cover = d.total||0;
             const meta = approvalsMetaFromCover(cover);
-            const pctCover = pctOf(d.real, cover);
-            const pctMeta = pctOf(d.real, meta);
-            return `<div class="mm-row mm-row-approvals">
-              <span class="mm-label">${m.label}</span>
-              <span class="mm-val ${signedCls}">${fmtN(d.real)} / ${fmtN(cover)}</span>
-              <span class="mm-chipgroup">
-                <span class="mm-chip ${gapClass(d.real,cover)}" title="Cumplimiento del cover mínimo (2× asesores)">cover ${pctCover===null?'—':pctCover+'%'}</span>
-                <span class="mm-chip ${gapClass(d.real,meta)}" title="Cumplimiento de la meta (3× asesores, ${meta})">meta ${pctMeta===null?'—':pctMeta+'%'}</span>
-              </span>
+            const pctCover = pctOf1(d.real, cover);
+            const pctMeta = pctOf1(d.real, meta);
+            const row = (sub, total, pct) => `<div class="mm-row">
+              <span class="mm-label">${m.label} ${sub}</span>
+              <span class="mm-val ${signedCls}">${fmtN(d.real)} / ${fmtN(total)}</span>
+              <span class="mm-chip ${gapClass(d.real,total)}">${pct===null?'—':pct+'%'}</span>
             </div>`;
+            return row('cover', cover, pctCover) + row('meta', meta, pctMeta);
           }
           if(m.noCompromiso){
             // Fichas del día: sin compromiso — Real/Total y % = Real/Total.
