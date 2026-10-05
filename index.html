@@ -96,8 +96,14 @@
   .tg-hero-chip.empty{background:rgba(255,255,255,.15);color:rgba(255,255,255,.7);}
 
   .tg-secondary{border-top:1px solid rgba(255,255,255,.15);padding-top:8px;margin-bottom:10px;}
-  .tg-sec-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:11.5px;}
+  .tg-sec-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:11.5px;flex-wrap:wrap;row-gap:3px;}
   .tg-sec-label{color:rgba(255,255,255,.65);font-weight:600;}
+  .tg-sec-right{display:flex;align-items:center;gap:6px;}
+  .tg-sec-chip{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:10px;padding:1px 6px;border-radius:99px;white-space:nowrap;}
+  .tg-sec-chip.ok{background:var(--ok-soft);color:var(--ok);}
+  .tg-sec-chip.warn{background:var(--warn-soft);color:var(--warn);}
+  .tg-sec-chip.low{background:var(--danger-soft);color:var(--danger);}
+  .tg-sec-chip.empty{background:rgba(255,255,255,.15);color:rgba(255,255,255,.7);}
   .tg-sec-val{color:#fff;font-family:'IBM Plex Mono',monospace;font-weight:600;}
 
   .tg-crec-row{display:flex;gap:14px;border-top:1px solid rgba(255,255,255,.15);padding-top:10px;}
@@ -183,6 +189,9 @@
   .mm-chip.warn{background:var(--warn-soft);color:var(--warn);}
   .mm-chip.low{background:var(--danger-soft);color:var(--danger);}
   .mm-chip.empty{background:var(--neutral-soft);color:var(--muted);}
+  .mm-row-approvals{flex-wrap:wrap;row-gap:4px;}
+  .mm-row-approvals .mm-label{flex:1 1 auto;}
+  .mm-chipgroup{flex-basis:100%;display:flex;justify-content:flex-end;gap:6px;}
 
   .branch-crec{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;padding-top:8px;border-top:1px solid var(--line);}
 
@@ -341,7 +350,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.32.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.33.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -377,6 +386,15 @@
     {key:'prospeccion', label:'Approvals',          unit:'count', hasTotal:true, noCompromiso:true},
     {key:'mora8mas',    label:'Mora 8+ días ($)',   unit:'money', hasTotal:false, signedColor:true},
   ];
+  // El "total" que manda el gerente en Approvals siempre es el cover mínimo que pide
+  // dirección (2× asesores elegibles — ver Agenda del Gerente, APPROVALS_MULT_DIRECCION).
+  // La meta propia (3× asesores) no se manda por separado: se deriva del mismo total
+  // capturado, sin pedirle al gerente un segundo registro.
+  const APPROVALS_MULT_DIRECCION = 2;
+  const APPROVALS_MULT_PROPIA = 3;
+  function approvalsMetaFromCover(coverTotal){
+    return Math.round((coverTotal||0) / APPROVALS_MULT_DIRECCION * APPROVALS_MULT_PROPIA);
+  }
   // "Otros indicadores" — mismos 3 que la Agenda del Gerente (En mesa/Por enviar/
   // Rechazado), sin compromiso, aquí solo se SUMAN entre todas las sucursales cargadas.
   const OTROS_INDICADORES = [
@@ -793,9 +811,33 @@
       const d = sums[key];
       const isMoney = m.unit==='money';
       const fmtN = v => isMoney ? fmtMoney(v) : String(v||0);
+      if(key==='prospeccion'){
+        // Approvals: el total capturado SIEMPRE es el cover mínimo (2× asesores);
+        // la meta (3×) se deriva de ese mismo número, sin tocar lo que se envía
+        // por WhatsApp (eso sigue usando únicamente el cover).
+        const cover = d.total||0;
+        const meta = approvalsMetaFromCover(cover);
+        const pctCover = pctOf(d.real, cover);
+        const pctMeta = pctOf(d.real, meta);
+        return `<div class="tg-sec-row">
+          <span class="tg-sec-label">${label}</span>
+          <span class="tg-sec-right">
+            <span class="tg-sec-val">${fmtN(d.real)} / ${fmtN(cover)}</span>
+            <span class="tg-sec-chip ${gapClass(d.real,cover)}" title="Cumplimiento del cover mínimo (2× asesores)">cover ${pctCover===null?'—':pctCover+'%'}</span>
+            <span class="tg-sec-chip ${gapClass(d.real,meta)}" title="Cumplimiento de la meta (3× asesores, ${meta})">meta ${pctMeta===null?'—':pctMeta+'%'}</span>
+          </span>
+        </div>`;
+      }
       if(m.noCompromiso){
-        // Fichas del día: sin compromiso — se muestra Real/Total.
-        return `<div class="tg-sec-row"><span class="tg-sec-label">${label}</span><span class="tg-sec-val">${fmtN(d.real)} / ${fmtN(d.total)}</span></div>`;
+        // Fichas del día / Mora 1-7: sin compromiso — se muestra Real/Total y su %.
+        const pct = pctOf(d.real, d.total);
+        return `<div class="tg-sec-row">
+          <span class="tg-sec-label">${label}</span>
+          <span class="tg-sec-right">
+            <span class="tg-sec-val">${fmtN(d.real)} / ${fmtN(d.total)}</span>
+            <span class="tg-sec-chip ${gapClass(d.real,d.total)}">${pct===null?'—':pct+'%'}</span>
+          </span>
+        </div>`;
       }
       const totalStr = m.hasTotal ? ` / ${fmtN(d.total)}` : '';
       return `<div class="tg-sec-row"><span class="tg-sec-label">${label}</span><span class="tg-sec-val">${fmtN(d.real)} / ${fmtN(d.compromiso)}${totalStr}</span></div>`;
@@ -1459,6 +1501,22 @@
           const isMoney = m.unit==='money';
           const fmtN = v => isMoney ? fmtMoney(v) : String(v||0);
           const signedCls = m.signedColor ? ((d.real||0)<0 ? 'sr-good' : ((d.real||0)>0 ? 'sr-bad' : '')) : '';
+          if(m.key==='prospeccion'){
+            // Approvals: el total capturado es el cover mínimo (2× asesores) — la
+            // meta (3×) se deriva del mismo número, sin pedir un segundo registro.
+            const cover = d.total||0;
+            const meta = approvalsMetaFromCover(cover);
+            const pctCover = pctOf(d.real, cover);
+            const pctMeta = pctOf(d.real, meta);
+            return `<div class="mm-row mm-row-approvals">
+              <span class="mm-label">${m.label}</span>
+              <span class="mm-val ${signedCls}">${fmtN(d.real)} / ${fmtN(cover)}</span>
+              <span class="mm-chipgroup">
+                <span class="mm-chip ${gapClass(d.real,cover)}" title="Cumplimiento del cover mínimo (2× asesores)">cover ${pctCover===null?'—':pctCover+'%'}</span>
+                <span class="mm-chip ${gapClass(d.real,meta)}" title="Cumplimiento de la meta (3× asesores, ${meta})">meta ${pctMeta===null?'—':pctMeta+'%'}</span>
+              </span>
+            </div>`;
+          }
           if(m.noCompromiso){
             // Fichas del día: sin compromiso — Real/Total y % = Real/Total.
             const pct = pctOf(d.real, d.total);
