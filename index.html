@@ -234,6 +234,9 @@
   .aseso-meta-group{display:flex;align-items:center;gap:9px;flex-shrink:0;}
   .aseso-meta{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
   .aseso-meta.baja{color:var(--danger);font-weight:700;}
+  .aseso-meta.ausente{color:var(--warn);font-weight:700;}
+  .branch-ausentes{font-size:11px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:5px 9px;margin-bottom:6px;font-weight:600;}
+  .branch-ausentes .ba-note{font-weight:500;color:var(--muted);}
   .aseso-meta.override{font-style:italic;}
   .gerente-row{background:var(--m1-soft);margin:0 -4px 2px;padding:5px 4px;border-radius:6px;border-bottom:none;flex-wrap:wrap;row-gap:3px;}
   .gerente-row .aseso-name{white-space:normal;overflow:visible;text-overflow:clip;flex:1 1 100%;}
@@ -347,7 +350,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.34.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.35.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1324,6 +1327,9 @@
         const a = effectiveAsesor(data, raw);
         const key = asesorKeyOf(raw);
         const metaBits = [];
+        if(a.activo!==false && a.ausencia){
+          metaBits.push(`<span class="aseso-meta ausente">${a.ausencia==='vacaciones'?'🏖 vacaciones':'📤 baja programada'}</span>`);
+        }
         if(a.activo===false){
           metaBits.push(`<span class="aseso-meta baja">de baja</span>`);
         } else if(!a.fechaAlta){
@@ -1537,6 +1543,12 @@
           </div>`;
         }).join('');
       }
+      // Asesores fuera de la meta (vacaciones / baja programada) — así se ve por qué
+      // la meta de esa sucursal es menor a lo que su plantilla total sugiere.
+      const ausentes = (Array.isArray(data.asesores) ? data.asesores : []).filter(a=>a.activo!==false && a.ausencia);
+      const ausentesHTML = ausentes.length
+        ? `<div class="branch-ausentes">${ausentes.map(a=>`${a.ausencia==='vacaciones'?'🏖':'📤'} ${escapeHTML(a.name)} · ${a.ausencia==='vacaciones'?'vacaciones':'baja programada'}`).join(' &nbsp;·&nbsp; ')} <span class="ba-note">(fuera de la meta)</span></div>`
+        : '';
       let otrosHTML = '';
       if(dia && dia.otros){
         otrosHTML = OTROS_INDICADORES.map(o=>{
@@ -1605,6 +1617,7 @@
         </div>
         ${isStaleReport ? `<div class="branch-stale-warn">&#9888; El Marcador más reciente que mandaron es del ${fmtDate(dateKey)}, no de hoy.</div>` : ''}
         ${!dateKey ? `<div class="branch-stale-warn">&#9888; Este reporte no trae ningún día de Marcador capturado.</div>` : ''}
+        ${ausentesHTML}
         <div class="mini-metrics">${metricsHTML}</div>
         ${avanceDelDiaHTML(sucursal, today)}
         ${otrosHTML ? `<div class="mini-metrics" style="margin-top:4px;">${otrosHTML}</div>` : ''}
