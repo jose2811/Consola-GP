@@ -10,7 +10,9 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=2">
 <meta name="theme-color" content="#1C2B39">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<!-- Fuentes NO bloqueantes: si la red del teléfono está "conectada" pero no responde, la app abre igual con fuente del sistema -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap"></noscript>
 <style>
   :root{
     --bg:#F4F5F1; --surface:#FFFFFF; --ink:#1C2B39; --muted:#5B6672; --line:#DADDD6;
@@ -350,7 +352,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.35.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.36.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -392,6 +394,30 @@
   // capturado, sin pedirle al gerente un segundo registro.
   const APPROVALS_MULT_DIRECCION = 2;
   const APPROVALS_MULT_PROPIA = 3;
+  // Meta semanal mínima automática (igual que la Agenda del Gerente): $70,000 por
+  // asesor elegible — activo, sin vacaciones/baja programada y con 15+ días de
+  // antigüedad medidos al LUNES de la semana (sin fecha de alta = cuenta).
+  const META_POR_ASESOR = 70000;
+  const ANTIGUEDAD_MIN_DIAS = 15;
+  function metaMinimaSemana(data, mondayStr){
+    if(!Array.isArray(data.asesores)) return 0;
+    const n = data.asesores.filter(raw=>{
+      const a = effectiveAsesor(data, raw);
+      if(a.activo===false || a.ausencia) return false;
+      if(!a.fechaAlta) return true;
+      const d = antiguedadDiasConsola(a.fechaAlta, mondayStr);
+      return d===null || d>=ANTIGUEDAD_MIN_DIAS;
+    }).length;
+    return n * META_POR_ASESOR;
+  }
+  // La que capturó el gerente manda; si no capturó ninguna, vale el mínimo automático.
+  function metaSemanaEfectiva(data, mondayStr){
+    const obj = data.metasSemanales && data.metasSemanales[mondayStr];
+    const capturada = obj ? (obj.meta||0) : 0;
+    if(capturada>0) return {meta: capturada, auto:false};
+    const piso = metaMinimaSemana(data, mondayStr);
+    return {meta: piso, auto: piso>0};
+  }
   function approvalsMetaFromCover(coverTotal){
     return Math.round((coverTotal||0) / APPROVALS_MULT_DIRECCION * APPROVALS_MULT_PROPIA);
   }
@@ -777,8 +803,7 @@
       totalPorDesembolsarCount += porDesembolsar.length;
       totalPorDesembolsarMonto += porDesembolsar.reduce((s,e)=>s+(e.monto||0),0);
 
-      const metaObj = data.metasSemanales && data.metasSemanales[monToday];
-      const metaBranch = metaObj ? (metaObj.meta||0) : 0;
+      const metaBranch = metaSemanaEfectiva(data, monToday).meta;
       if(metaBranch>0){ metaGeneral += metaBranch; nBranchesConMeta++; }
       realAcumGeneral += weekDatesToday.reduce((sum,d)=>{
         const dia = data.marcadorDias && data.marcadorDias[d];
@@ -854,14 +879,14 @@
     const metaPct = metaGeneral>0 ? Math.min(100, Math.round((realAcumGeneral/metaGeneral)*100)) : 0;
     const metaHTML = metaGeneral>0 ? `
       <div class="tg-meta">
-        <div class="tg-meta-label">🎯 Meta semanal general (${nBranchesConMeta}/${nBranches} sucursal(es) con meta capturada)</div>
+        <div class="tg-meta-label">🎯 Meta semanal general (${nBranchesConMeta}/${nBranches} sucursal(es) con meta)</div>
         <div class="tg-meta-bignum"><span class="n">${fmtMoney(realAcumGeneral)}</span><span class="of">de ${fmtMoney(metaGeneral)}</span></div>
         <div class="tg-meta-bar"><div class="tg-meta-bar-fill" style="width:${metaPct}%"></div></div>
         <div class="tg-meta-note">${metaPct}% de la meta · lunes a ${fmtDate(today)}</div>
       </div>` : `
       <div class="tg-meta">
         <div class="tg-meta-label">🎯 Meta semanal general</div>
-        <div class="tg-meta-empty">Ninguna sucursal ha capturado su meta semanal todavía.</div>
+        <div class="tg-meta-empty">Ninguna sucursal tiene meta semanal todavía.</div>
       </div>`;
 
     wrap.innerHTML = `
@@ -1571,10 +1596,10 @@
         const dia = data.marcadorDias && data.marcadorDias[d];
         return sum + ((dia && dia.metrics && dia.metrics.desembolso) ? (dia.metrics.desembolso.real||0) : 0);
       }, 0);
-      const metaObjBranch = data.metasSemanales && data.metasSemanales[mondayOf(today)];
-      const metaSemanaBranch = metaObjBranch ? (metaObjBranch.meta||0) : 0;
+      const metaEf = metaSemanaEfectiva(data, mondayOf(today));
+      const metaSemanaBranch = metaEf.meta;
       const metaSemanaHTML = metaSemanaBranch>0
-        ? `<div class="bc-stat"><b>${Math.min(100,Math.round((desembolsadoSemana/metaSemanaBranch)*100))}%</b><span>meta semanal (${fmtMoney(metaSemanaBranch)})</span></div>`
+        ? `<div class="bc-stat"><b>${Math.min(100,Math.round((desembolsadoSemana/metaSemanaBranch)*100))}%</b><span>meta semanal (${fmtMoney(metaSemanaBranch)})${metaEf.auto?' · mínimo automático':''}</span></div>`
         : `<div class="bc-stat"><b>—</b><span>sin meta semanal capturada</span></div>`;
       const isOpen = !!openDetail[sucursal];
       // Las dos cintas del compromiso: 1) todo lo prometido vigente ahora mismo
@@ -1801,6 +1826,9 @@
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+  }
   render();
   renderBuzonStatus(); // muestra de inmediato el estado de la última actualización (aunque sea de antes)
   fetchFromBuzon(true); // al abrir la consola, jala lo más nuevo y actualiza el banner de estado (sin toast)
