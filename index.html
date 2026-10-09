@@ -239,6 +239,11 @@
   .aseso-meta.ausente{color:var(--warn);font-weight:700;}
   .branch-ausentes{font-size:11px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:5px 9px;margin-bottom:6px;font-weight:600;}
   .branch-ausentes .ba-note{font-weight:500;color:var(--muted);}
+  .comp-alert{font-size:11.5px;color:var(--danger);background:var(--danger-soft,#fdecea);border-radius:8px;padding:6px 9px;margin-bottom:6px;line-height:1.45;}
+  .comp-alert b{font-weight:700;}
+  .comp-alert .ca-line{display:block;margin-top:2px;color:var(--text,inherit);font-weight:500;}
+  .comp-alert .ca-note{color:var(--muted);font-weight:500;}
+  .lu-flag{font-size:11px;color:var(--danger);font-weight:700;white-space:nowrap;flex-shrink:0;}
   .aseso-meta.override{font-style:italic;}
   .gerente-row{background:var(--m1-soft);margin:0 -4px 2px;padding:5px 4px;border-radius:6px;border-bottom:none;flex-wrap:wrap;row-gap:3px;}
   .gerente-row .aseso-name{white-space:normal;overflow:visible;text-overflow:clip;flex:1 1 100%;}
@@ -352,7 +357,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.36.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.37.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1236,6 +1241,55 @@
   // ---------- Última actualización por sucursal (vista rápida, sin bajar) ----------
   // Mismo criterio de "atrasada" que ya usa cada tarjeta más abajo (renderBranches),
   // solo que aquí se ve de un vistazo y ordenado con la más atrasada primero.
+
+  // ---------- Vigilancia del Compromiso de Desembolso ----------
+  // Dos fuentes: 1) la bitácora que manda la agenda del gerente (compromisoLog: cada
+  // cambio del número, con hora y motivo) y 2) la "marca más alta" que ESTA consola ha
+  // visto hoy por sucursal — sirve aunque el gerente tenga una versión vieja de la
+  // agenda o la bitácora no venga. Si el compromiso bajó, se muestra aquí.
+  const COMP_MAX_KEY = 'director:compMax';
+  function loadCompMax(){ try{ return JSON.parse(lsGet(COMP_MAX_KEY)||'{}'); }catch(e){ return {}; } }
+  function actualizarCompMax(){
+    const today = todayStr();
+    const store = loadCompMax();
+    let changed = false;
+    Object.entries(branches).forEach(([suc, data])=>{
+      const dia = data.marcadorDias && data.marcadorDias[today];
+      const cur = dia && dia.metrics && dia.metrics.desembolso ? (dia.metrics.desembolso.compromiso||0) : null;
+      if(cur===null) return;
+      store[suc] = store[suc] || {};
+      const rec = store[suc][today];
+      if(!rec || cur > rec.max){ store[suc][today] = {max: cur, ts: data.exportedAt || new Date().toISOString()}; changed = true; }
+    });
+    // limpia días viejos (se queda con hoy y los últimos 7)
+    Object.keys(store).forEach(suc=>{
+      Object.keys(store[suc]).forEach(d=>{
+        if(d !== today && (new Date(today+'T00:00:00') - new Date(d+'T00:00:00')) > 7*86400000){ delete store[suc][d]; changed = true; }
+      });
+    });
+    if(changed) lsSet(COMP_MAX_KEY, JSON.stringify(store));
+  }
+  function compromisoAlerta(sucursal, data){
+    const today = todayStr();
+    const dia = data.marcadorDias && data.marcadorDias[today];
+    if(!dia || !dia.metrics || !dia.metrics.desembolso) return null;
+    const cur = dia.metrics.desembolso.compromiso||0;
+    const log = (data.compromisoLog && Array.isArray(data.compromisoLog[today])) ? data.compromisoLog[today] : [];
+    const drops = log.filter(x=>(x.a||0) < (x.de||0));
+    if(drops.length) return {tipo:'log', drops, cur};
+    const rec = (loadCompMax()[sucursal]||{})[today];
+    if(rec && rec.max > cur) return {tipo:'max', max: rec.max, ts: rec.ts, cur};
+    return null;
+  }
+  function compromisoAlertaHTML(al){
+    if(!al) return '';
+    if(al.tipo==='log'){
+      return `<div class="comp-alert">⚠ <b>El compromiso de desembolso bajó hoy</b>${al.drops.map(x=>`<span class="ca-line">${escapeHTML(x.h||'')} · ${fmtMoney(x.de)} → ${fmtMoney(x.a)} · ${x.causa?escapeHTML(x.causa):'<b>sin motivo registrado</b>'}</span>`).join('')}</div>`;
+    }
+    const h = al.ts ? new Date(al.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div class="comp-alert">⚠ <b>El compromiso de desembolso bajó hoy</b><span class="ca-line">La consola lo vio en ${fmtMoney(al.max)}${h?' (envío de las '+h+')':''} y ahora está en ${fmtMoney(al.cur)}.</span><span class="ca-line ca-note">Revisa los comentarios de sus prospectos en "Ver agenda completa".</span></div>`;
+  }
+
   function renderLastUpdated(){
     const wrap = $('#lastUpdatedWrap');
     const list = $('#lastUpdatedList');
@@ -1253,13 +1307,14 @@
       // reportes viejos (de antes de "Mi Equipo") no lo traen, y 0 no es lo mismo
       // que "todavía no sabemos".
       const nAsesores = Array.isArray(data.asesores) ? data.asesores.filter(a=>a.activo!==false).length : null;
-      return { sucursal, nombre: data.sucursal||sucursal, isFresh, exportedStr, sortTime, nAsesores };
+      return { sucursal, nombre: data.sucursal||sucursal, isFresh, exportedStr, sortTime, nAsesores, compBajo: !!compromisoAlerta(sucursal, data) };
     });
     rows.sort((a,b)=> a.sortTime - b.sortTime);
     list.innerHTML = rows.map(r=>`
       <button type="button" class="lu-row" data-jump="${escapeHTML(r.sucursal)}">
         ${r.nAsesores===null ? '' : `<span class="lu-asesores" title="Asesores activos capturados en Mi Equipo">👥 ${r.nAsesores}</span>`}
         <span class="lu-name">${escapeHTML(r.nombre)}</span>
+        ${r.compBajo ? '<span class="lu-flag" title="El compromiso de desembolso bajó hoy">⚠ compromiso bajó</span>' : ''}
         <span class="lu-time ${r.isFresh?'lu-fresh':'lu-stale'}">${r.isFresh?'✓':'⚠'} ${r.exportedStr}</span>
       </button>`).join('');
     list.querySelectorAll('[data-jump]').forEach(btn=>{
@@ -1518,6 +1573,7 @@
   function renderBranches(){
     const wrap = $('#branchesWrap');
     const today = todayStr();
+    actualizarCompMax();
     const entries = Object.entries(branches).sort((a,b)=> a[0].localeCompare(b[0]));
     wrap.innerHTML = entries.map(([sucursal, data])=>{
       const dateKey = data.marcadorDias && data.marcadorDias[today] ? today : latestMarcadorDate(data);
@@ -1644,6 +1700,7 @@
         ${!dateKey ? `<div class="branch-stale-warn">&#9888; Este reporte no trae ningún día de Marcador capturado.</div>` : ''}
         ${ausentesHTML}
         <div class="mini-metrics">${metricsHTML}</div>
+        ${compromisoAlertaHTML(compromisoAlerta(sucursal, data))}
         ${avanceDelDiaHTML(sucursal, today)}
         ${otrosHTML ? `<div class="mini-metrics" style="margin-top:4px;">${otrosHTML}</div>` : ''}
         ${todayHTML}
