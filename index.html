@@ -243,6 +243,21 @@
   .comp-alert b{font-weight:700;}
   .comp-alert .ca-line{display:block;margin-top:2px;color:var(--text,inherit);font-weight:500;}
   .comp-alert .ca-note{color:var(--muted);font-weight:500;}
+  .sol-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px 8px;margin-bottom:12px;}
+  .sol-title{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+  .sol-title .sol-n{background:var(--warn-soft);color:var(--warn);border-radius:99px;padding:1px 8px;margin-left:4px;}
+  .sol-empty{font-size:12.5px;color:var(--muted);padding:2px 0 6px;}
+  .sol-it{border-left:4px solid var(--warn);background:var(--warn-soft);border-radius:8px;padding:7px 10px;margin-bottom:6px;}
+  .sol-it.old{border-left-color:var(--danger);background:var(--danger-soft);}
+  .sol-it.at{border-left-color:var(--ok);background:var(--neutral-soft);opacity:.8;}
+  .sol-hd{display:flex;gap:6px;align-items:center;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px;flex-wrap:wrap;}
+  .sol-hd .sol-age{margin-left:auto;}
+  .sol-it.old .sol-age{color:var(--danger);}
+  .sol-tx{font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
+  .sol-act{margin-top:6px;}
+  .sol-act button{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:4px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;color:inherit;}
+  .sol-at-toggle{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 0 6px;font-family:inherit;text-decoration:underline;}
+  .lu-sol{font-size:11px;color:var(--warn);font-weight:700;white-space:nowrap;flex-shrink:0;}
   .lu-flag{font-size:11px;color:var(--danger);font-weight:700;white-space:nowrap;flex-shrink:0;}
   .aseso-meta.override{font-style:italic;}
   .gerente-row{background:var(--m1-soft);margin:0 -4px 2px;padding:5px 4px;border-radius:6px;border-bottom:none;flex-wrap:wrap;row-gap:3px;}
@@ -318,6 +333,8 @@
     <div id="lastUpdatedList"></div>
   </div>
 
+  <div class="sol-box" id="solicitudesWrap" style="display:none;"></div>
+
   <div class="upload-box" id="uploadBox">
     <div class="ico">&#128193;</div>
     <div class="t1">Cargar reportes de gerentes a mano (respaldo)</div>
@@ -357,7 +374,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.37.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.38.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -482,6 +499,16 @@
   function touchLastModified(){ lsSet('director:lastModified', new Date().toISOString()); }
 
   const BRANCHES_KEY = 'director:branches';
+  // Datos que SOLO existen en la consola (fechas capturadas por el director, marcas de
+  // "atendida"): el reporte del gerente no los trae, así que al recibir un reporte
+  // nuevo hay que conservarlos en vez de pisarlos.
+  const DIRECTOR_ONLY_FIELDS = ['overrides','gerenteInfo','solicitudesAtendidas'];
+  function stripDirectorOnly(o){ if(!o) return o; const c = {...o}; DIRECTOR_ONLY_FIELDS.forEach(f=>delete c[f]); return c; }
+  function adoptBranch(key, incoming){
+    const prev = branches[key];
+    if(prev) DIRECTOR_ONLY_FIELDS.forEach(f=>{ if(prev[f] && !incoming[f]) incoming[f] = prev[f]; });
+    branches[key] = incoming;
+  }
   function loadBranches(){ try{ return JSON.parse(lsGet(BRANCHES_KEY)||'{}'); }catch(e){ return {}; } }
   function saveBranches(b){ lsSet(BRANCHES_KEY, JSON.stringify(b)); touchLastModified(); }
   let branches = loadBranches();
@@ -554,11 +581,11 @@
         if(!entry || !entry.data) return;
         const displayName = entry.sucursalOriginal || rawKey;
         const key = normSucursal(displayName);
-        const before = branches[key] ? JSON.stringify(branches[key]) : null;
-        const after = JSON.stringify(entry.data);
+        const before = branches[key] ? JSON.stringify(stripDirectorOnly(branches[key])) : null;
+        const after = JSON.stringify(stripDirectorOnly(entry.data));
         if(before !== after) changed.push(displayName);
         mergeIntoArchive(key, entry.data.gerente, entry.data.crecimiento);
-        branches[key] = entry.data;
+        adoptBranch(key, entry.data);
         count++;
       });
       const nuevosCortes = {};
@@ -700,7 +727,7 @@
           } else {
             const key = normSucursal(data.sucursal || file.name.replace(/\.json$/i,''));
             mergeIntoArchive(key, data.gerente, data.crecimiento);
-            branches[key] = data;
+            adoptBranch(key, data);
           }
           loaded++;
         }catch(err){ toast(`No se pudo leer ${file.name} — ¿es un JSON exportado de la Agenda del Gerente o de esta Consola?`); }
@@ -1290,6 +1317,62 @@
     return `<div class="comp-alert">⚠ <b>El compromiso de desembolso bajó hoy</b><span class="ca-line">La consola lo vio en ${fmtMoney(al.max)}${h?' (envío de las '+h+')':''} y ahora está en ${fmtMoney(al.cur)}.</span><span class="ca-line ca-note">Revisa los comentarios de sus prospectos en "Ver agenda completa".</span></div>`;
   }
 
+  // ---------- Solicitudes y pendientes de los gerentes ----------
+  // Los gerentes capturan en su agenda lo que necesitan de GP (tickets, incentivos,
+  // pendientes) y llega en el envío (data.solicitudes). Aquí se listan hasta que el
+  // director las marque como atendidas; esa marca vive solo en la consola
+  // (solicitudesAtendidas) y se "reabre" sola si el gerente edita el texto después.
+  const SOL_TIPOS_C = {ticket:'🎫 Ticket', incentivo:'💰 Incentivo', apoyo:'🙋 Apoyo', otro:'📝 Otro'};
+  let solAtendidasOpen = false;
+  function solDiasC(iso){
+    const d = new Date(iso); if(isNaN(d)) return 0;
+    const n = new Date();
+    return Math.max(0, Math.round((new Date(n.getFullYear(),n.getMonth(),n.getDate()) - new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000));
+  }
+  function solEdadC(iso){ const n = solDiasC(iso); return n===0?'hoy':n===1?'hace 1 día':'hace '+n+' días'; }
+  function solicitudesPorEstado(){
+    const pend = [], atend = [];
+    Object.entries(branches).forEach(([suc, data])=>{
+      const at = data.solicitudesAtendidas || {};
+      (Array.isArray(data.solicitudes) ? data.solicitudes : []).filter(x=>x.estado!=='resuelta').forEach(x=>{
+        const it = {suc, nombre: data.sucursal||suc, gerente: data.gerente||'', x};
+        const a = at[x.id];
+        ((a && a.act===x.actualizado) ? atend : pend).push(it);
+      });
+    });
+    const byAge = (a,b)=> (a.x.creado||'').localeCompare(b.x.creado||'');
+    pend.sort(byAge); atend.sort(byAge);
+    return {pend, atend};
+  }
+  function renderSolicitudes(){
+    const wrap = $('#solicitudesWrap');
+    if(!Object.keys(branches).length){ wrap.style.display='none'; return; }
+    wrap.style.display = '';
+    const {pend, atend} = solicitudesPorEstado();
+    const card = (it, atendida)=>{
+      const viejo = !atendida && solDiasC(it.x.creado) >= 3;
+      return `<div class="sol-it ${viejo?'old':''} ${atendida?'at':''}">
+        <div class="sol-hd"><span>${SOL_TIPOS_C[it.x.tipo]||SOL_TIPOS_C.otro}</span><span>· ${escapeHTML(it.nombre)}${it.gerente?' ('+escapeHTML(it.gerente)+')':''}</span><span class="sol-age">${solEdadC(it.x.creado)}</span></div>
+        <div class="sol-tx">${escapeHTML(it.x.texto)}</div>
+        <div class="sol-act"><button data-sol-${atendida?'reopen':'ok'}="1" data-suc="${escapeHTML(it.suc)}" data-id="${escapeHTML(it.x.id)}">${atendida?'↩ Reabrir':'✓ Atendida'}</button></div>
+      </div>`;
+    };
+    wrap.innerHTML = `<div class="sol-title">📌 Solicitudes de gerentes${pend.length?`<span class="sol-n">${pend.length}</span>`:''}</div>`
+      + (pend.length ? pend.map(it=>card(it,false)).join('') : `<div class="sol-empty">Sin solicitudes pendientes ✓</div>`)
+      + (atend.length ? `<button class="sol-at-toggle" data-sol-toggle="1">${solAtendidasOpen?'▴ Ocultar':'▾ Ver'} atendidas (${atend.length})</button>${solAtendidasOpen ? atend.map(it=>card(it,true)).join('') : ''}` : '');
+  }
+  $('#solicitudesWrap').addEventListener('click', ev=>{
+    const t = ev.target.closest('button'); if(!t) return;
+    if(t.dataset.solToggle){ solAtendidasOpen = !solAtendidasOpen; renderSolicitudes(); return; }
+    const data = branches[t.dataset.suc]; if(!data) return;
+    const x = (data.solicitudes||[]).find(s=>s.id===t.dataset.id); if(!x) return;
+    if(!data.solicitudesAtendidas) data.solicitudesAtendidas = {};
+    if(t.dataset.solOk) data.solicitudesAtendidas[x.id] = {ts: new Date().toISOString(), act: x.actualizado};
+    else delete data.solicitudesAtendidas[x.id];
+    saveBranches(branches);
+    renderSolicitudes(); renderLastUpdated();
+  });
+
   function renderLastUpdated(){
     const wrap = $('#lastUpdatedWrap');
     const list = $('#lastUpdatedList');
@@ -1307,13 +1390,15 @@
       // reportes viejos (de antes de "Mi Equipo") no lo traen, y 0 no es lo mismo
       // que "todavía no sabemos".
       const nAsesores = Array.isArray(data.asesores) ? data.asesores.filter(a=>a.activo!==false).length : null;
-      return { sucursal, nombre: data.sucursal||sucursal, isFresh, exportedStr, sortTime, nAsesores, compBajo: !!compromisoAlerta(sucursal, data) };
+      const nSol = solicitudesPorEstado().pend.filter(it=>it.suc===sucursal).length;
+      return { sucursal, nombre: data.sucursal||sucursal, isFresh, exportedStr, sortTime, nAsesores, nSol, compBajo: !!compromisoAlerta(sucursal, data) };
     });
     rows.sort((a,b)=> a.sortTime - b.sortTime);
     list.innerHTML = rows.map(r=>`
       <button type="button" class="lu-row" data-jump="${escapeHTML(r.sucursal)}">
         ${r.nAsesores===null ? '' : `<span class="lu-asesores" title="Asesores activos capturados en Mi Equipo">👥 ${r.nAsesores}</span>`}
         <span class="lu-name">${escapeHTML(r.nombre)}</span>
+        ${r.nSol ? `<span class="lu-sol" title="Solicitudes pendientes de este gerente">📌 ${r.nSol}</span>` : ''}
         ${r.compBajo ? '<span class="lu-flag" title="El compromiso de desembolso bajó hoy">⚠ compromiso bajó</span>' : ''}
         <span class="lu-time ${r.isFresh?'lu-fresh':'lu-stale'}">${r.isFresh?'✓':'⚠'} ${r.exportedStr}</span>
       </button>`).join('');
@@ -1850,6 +1935,7 @@
     if(n){
       renderTotalGeneral();
       renderLastUpdated();
+      renderSolicitudes();
       renderDirectorDatesBanner();
       renderDayChips();
       renderCubetaGrid();
@@ -1857,6 +1943,7 @@
       renderBranches();
     } else {
       $('#lastUpdatedWrap').style.display = 'none';
+      $('#solicitudesWrap').style.display = 'none';
       $('#directorDatesBanner').style.display = 'none';
     }
     // Caja de carga: grande solo la primera vez (mientras no hay nada cargado);
