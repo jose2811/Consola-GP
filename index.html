@@ -374,7 +374,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.38.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.39.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -440,8 +440,14 @@
     const piso = metaMinimaSemana(data, mondayStr);
     return {meta: piso, auto: piso>0};
   }
+  // Desde el 15/oct/2026 el piso es 3× (cover) y 4× (meta). La agenda nueva manda la
+  // meta ya calculada (totalMeta); los reportes de agendas sin actualizar no la traen,
+  // y para esos se deriva con los multiplicadores viejos (2× → 3×).
   function approvalsMetaFromCover(coverTotal){
     return Math.round((coverTotal||0) / APPROVALS_MULT_DIRECCION * APPROVALS_MULT_PROPIA);
+  }
+  function approvalsMetaOf(d){
+    return (d && typeof d.totalMeta==='number') ? d.totalMeta : approvalsMetaFromCover(d ? d.total : 0);
   }
   // "Otros indicadores" — mismos 3 que la Agenda del Gerente (En mesa/Por enviar/
   // Rechazado), sin compromiso, aquí solo se SUMAN entre todas las sucursales cargadas.
@@ -804,7 +810,7 @@
   function renderTotalGeneral(){
     const wrap = $('#totalGeneral');
     const today = todayStr();
-    let sums = {}; METRICS.forEach(m=> sums[m.key] = {real:0, compromiso:0, total:0});
+    let sums = {}; METRICS.forEach(m=> sums[m.key] = {real:0, compromiso:0, total:0, totalMeta:0});
     let otrosSums = {}; OTROS_INDICADORES.forEach(o=> otrosSums[o.key] = {count:0, monto:0});
     let totalPosibleCount = 0, totalPosibleMonto = 0, totalPorDesembolsarCount = 0, totalPorDesembolsarMonto = 0;
     // Meta semanal general — se suma la meta que cada gerente capturó para ESTA semana
@@ -818,7 +824,7 @@
       if(dia && dia.metrics){
         METRICS.forEach(m=>{
           const d = dia.metrics[m.key];
-          if(d){ sums[m.key].real += (d.real||0); sums[m.key].compromiso += (d.compromiso||0); sums[m.key].total += (d.total||0); }
+          if(d){ sums[m.key].real += (d.real||0); sums[m.key].compromiso += (d.compromiso||0); sums[m.key].total += (d.total||0); sums[m.key].totalMeta += (m.key==='prospeccion' ? approvalsMetaOf(d) : 0); }
         });
       }
       if(dia && dia.otros){
@@ -872,12 +878,12 @@
       const isMoney = m.unit==='money';
       const fmtN = v => isMoney ? fmtMoney(v) : String(v||0);
       if(key==='prospeccion'){
-        // Approvals: el total capturado SIEMPRE es el cover mínimo (2× asesores);
-        // la meta (3×) se deriva de ese mismo número, sin tocar lo que se envía
+        // Approvals: el total capturado SIEMPRE es el cover mínimo de dirección;
+        // la meta viene en totalMeta (o se deriva si el reporte es viejo), sin tocar lo que se envía
         // por WhatsApp (eso sigue usando únicamente el cover). Dos líneas
         // separadas (cover / meta), cada una con su propio % a un decimal.
         const cover = d.total||0;
-        const meta = approvalsMetaFromCover(cover);
+        const meta = d.totalMeta||0;
         const pctCover = pctOf1(d.real, cover);
         const pctMeta = pctOf1(d.real, meta);
         const row = (sub, total, pct) => `<div class="tg-sec-row">
@@ -1679,7 +1685,7 @@
             // meta (3×) se deriva del mismo número, sin pedir un segundo registro.
             // Dos líneas separadas (cover / meta), % a un decimal.
             const cover = d.total||0;
-            const meta = approvalsMetaFromCover(cover);
+            const meta = approvalsMetaOf(d);
             const pctCover = pctOf1(d.real, cover);
             const pctMeta = pctOf1(d.real, meta);
             const row = (sub, total, pct) => `<div class="mm-row">
