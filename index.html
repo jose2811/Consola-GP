@@ -354,6 +354,8 @@
     <div class="cubeta-detail" id="promesaDetail" style="display:none;"></div>
     <div id="mesaTile"></div>
     <div class="cubeta-detail" id="mesaDetail" style="display:none;"></div>
+    <div id="firmaTile"></div>
+    <div class="cubeta-detail" id="firmaDetail" style="display:none;"></div>
     <div class="section-title">Sucursales cargadas</div>
     <div id="branchesWrap"></div>
   </div>
@@ -374,7 +376,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v1.39.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.0.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -408,7 +410,7 @@
     {key:'mora17',      label:'Mora 1–7 días',      unit:'count', hasTotal:true, noCompromiso:true},
     {key:'desembolso',  label:'Desembolso',         unit:'money', hasTotal:false},
     {key:'prospeccion', label:'Approvals',          unit:'count', hasTotal:true, noCompromiso:true},
-    {key:'mora8mas',    label:'Mora 8+ días ($)',   unit:'money', hasTotal:false, signedColor:true},
+    {key:'mora8mas',    label:'Mora 8–60 días ($)', unit:'money', hasTotal:false},
   ];
   // El "total" que manda el gerente en Approvals siempre es el cover mínimo que pide
   // dirección (2× asesores elegibles — ver Agenda del Gerente, APPROVALS_MULT_DIRECCION).
@@ -419,7 +421,9 @@
   // Meta semanal mínima automática (igual que la Agenda del Gerente): $70,000 por
   // asesor elegible — activo, sin vacaciones/baja programada y con 15+ días de
   // antigüedad medidos al LUNES de la semana (sin fecha de alta = cuenta).
-  const META_POR_ASESOR = 70000;
+  const META_POR_ASESOR = 100000;
+  const META_POR_ASESOR_ANTES = 70000;       // semanas anteriores al 19/oct/2026 (no se reescribe historia)
+  const META_100K_DESDE = '2026-10-19';
   const ANTIGUEDAD_MIN_DIAS = 15;
   function metaMinimaSemana(data, mondayStr){
     if(!Array.isArray(data.asesores)) return 0;
@@ -430,7 +434,7 @@
       const d = antiguedadDiasConsola(a.fechaAlta, mondayStr);
       return d===null || d>=ANTIGUEDAD_MIN_DIAS;
     }).length;
-    return n * META_POR_ASESOR;
+    return n * (mondayStr >= META_100K_DESDE ? META_POR_ASESOR : META_POR_ASESOR_ANTES);
   }
   // La que capturó el gerente manda; si no capturó ninguna, vale el mínimo automático.
   function metaSemanaEfectiva(data, mondayStr){
@@ -455,12 +459,12 @@
     {key:'por_firmar', icon:'✍️', label:'Por firmar'},
     {key:'en_mesa',    icon:'🏦', label:'En mesa'},
     {key:'por_enviar', icon:'📤', label:'Por enviar'},
-    {key:'rechazado',  icon:'⛔', label:'Rechazado'},
+    {key:'rechazado',  icon:'⛔', label:'Rechazados (semana)'},
   ];
   const CREC_STALE_DAYS = 3;
   // Mismo criterio que la Agenda del Gerente: "Se sube a mesa" es un compromiso de
   // corto plazo, vence en 1 día. El resto de los estatus abiertos usa 3 días.
-  const CREC_STALE_DAYS_BY_STATUS = { promesa_mesa: 1 };
+  const CREC_STALE_DAYS_BY_STATUS = { promesa_mesa: 2, analisis: 3, por_firmar: 2 };   // = límite rojo de la Agenda v2
   function crecStaleThreshold(e){ return CREC_STALE_DAYS_BY_STATUS[e.status] ?? CREC_STALE_DAYS; }
   function isCrecDone(e){ return e.status==='desembolsado' || e.status==='rechazado'; }
   // Cinta 1: TODO lo marcado "por desembolsar" que sigue abierto — sin importar si
@@ -492,7 +496,7 @@
     {key:'lnr',         color:'#A1743D', label:'LNR',              icon:'🎯'},
     {key:'leaddigital', color:'#6B4FA0', label:'Leads digitales',  icon:'📲'},
   ];
-  const STATUS_LABELS = { pendiente:'Pendiente', contactado:'Contactado', consultado:'Consultado', evaluacion:'Evaluación', validacion:'Validación', promesa_mesa:'Se sube a mesa', analisis:'Enviado a análisis', desembolsado:'Desembolsado', rechazado:'Rechazado' };
+  const STATUS_LABELS = { pendiente:'Pendiente', contactado:'Contactado', consultado:'Consultado', evaluacion:'Evaluación', validacion:'Validación', promesa_mesa:'Por enviar (se sube a mesa)', por_firmar:'Por firmar', analisis:'Enviado a análisis', desembolsado:'Desembolsado', rechazado:'Rechazado' };
   function crecDaysOpen(e, today){ return dayGap(e.originDate, today) + 1; }
   function crecStaleDays(e, today){ const last = e.statusDate || e.originDate; return last ? dayGap(last, today) : 0; }
   function isCrecStale(e, today){ return !isCrecDone(e) && crecStaleDays(e, today) >= crecStaleThreshold(e); }
@@ -564,6 +568,75 @@
     if(on && el){ el.textContent = 'Conectando con el buzón...'; el.className = 'buzon-status loading'; }
   }
 
+  // ================= Adaptador: Agenda del Gerente v2 -> forma interna de la Consola =================
+  // Solo se lee el formato nuevo ('agenda-gerente-v2'). Se traduce al mismo molde que ya usan
+  // todos los renderers (marcadorDias / crecimiento / asesores / metasSemanales) y se le
+  // agrega el pipeline crudo (pipeV2) para las vistas de etapas, antigüedad y rechazos.
+  const V2_STATUS = {'Por enviar':'promesa_mesa','En mesa':'analisis','Por firmar':'por_firmar','Desembolsado':'desembolsado','Rechazado':'rechazado'};
+  const V2_LIM = {'Por enviar':[1,2],'En mesa':[2,3],'Por firmar':[1,2]};   // días: ámbar / rojo (igual que la Agenda)
+  function v2Stage(p){ const h=p.h||{}; if(h.re) return 'Rechazado'; if(h.de) return 'Desembolsado'; if(h.pf) return 'Por firmar'; if(h.en) return 'En mesa'; if(h.pe) return 'Por enviar'; return 'Sin etapa'; }
+  function v2Last(p){
+    const h=p.h||{}; const xs=['pf','en','pe','de','re'].map(k=>h[k]).filter(Boolean).sort((a,b)=>(a.d+a.t).localeCompare(b.d+b.t));
+    return xs.length ? xs[xs.length-1] : null;
+  }
+  function v2DaysInStage(p, today){ const l=v2Last(p); return l ? Math.max(0, dayGap(l.d, today)) : 0; }
+  function v2Lvl(p, today){ const L=V2_LIM[v2Stage(p)]; if(!L) return 0; const n=v2DaysInStage(p,today); return n>=L[1]?2:(n>=L[0]?1:0); }
+  function adaptV2(d){
+    if(!d || d.formato!=='agenda-gerente-v2' || d._adapted) return d;
+    const o = {...d, _adapted:true, v2:true};
+    const hoy = d.exportedAt ? toDateStr(new Date(d.exportedAt)) : todayStr();
+    o.asesores = (d.asesores||[]).map(a=>({...a}));
+    o.metasSemanales = {};
+    Object.entries(d.metas||{}).forEach(([mon,m])=>{ o.metasSemanales[mon] = {meta: (m && m.meta) || 0}; });
+    if(d.metaSemana && d.metaSemana.lunes){
+      o.metasSemanales[d.metaSemana.lunes] = {meta: Math.max(d.metaSemana.meta||0, d.metaSemana.piso||0)};
+    }
+    o.marcadorDias = {};
+    const et = d.etapas || {};
+    Object.keys(d.resumenDias||{}).forEach(f=>{
+      const r = d.resumenDias[f] || {};
+      const dia = {
+        metrics:{
+          fichas:{real:(r.fichas&&r.fichas.real)||0, total:(r.fichas&&r.fichas.total)||0},
+          mora17:{real:(r.mora17&&r.mora17.real)||0, total:(r.mora17&&r.mora17.total)||0},
+          desembolso:{real:(r.desembolso&&r.desembolso.real)||0, compromiso:(r.desembolso&&r.desembolso.comp)||0},
+          prospeccion:{real:(r.approvals&&r.approvals.real)||0, total:(r.approvals&&r.approvals.total)||0},
+          mora8mas:{real:(r.mora860&&r.mora860.real)||0, compromiso:(r.mora860&&r.mora860.comp)||0}
+        },
+        aMesa: r.aMesa || null,
+        fijadoA: r.fijadoA || null
+      };
+      if(f===hoy){
+        const q = x => ({count:(x&&x.n)||0, monto:(x&&x.monto)||0});
+        dia.otros = { por_firmar:q(et.porFirmar), en_mesa:q(et.enMesa), por_enviar:q(et.porEnviar), rechazado:q(et.rechazadosSemana) };
+      }
+      o.marcadorDias[f] = dia;
+    });
+    o.pipeV2 = d.pipeline || [];
+    o.crecimiento = o.pipeV2.map(p=>{
+      const st = v2Stage(p), last = v2Last(p), pe = p.h && p.h.pe;
+      return {
+        id:p.id, name:p.name, tipo:p.tipo||'nuevo', monto:p.monto||0, asesorId:p.asesor,
+        status: V2_STATUS[st] || 'promesa_mesa',
+        statusDate: last ? last.d : (pe ? pe.d : hoy),
+        originDate: pe ? pe.d : hoy,
+        porDesembolsar: !!(p.h && p.h.pin) && !(p.h.de || p.h.re),
+        motivo: p.motivo||'',
+        comments: (p.notas||[]).map(n=>({text:n.x, date:n.d, time:n.t}))
+      };
+    });
+    o.compromisoLog = {};
+    Object.keys(d.compromisoLog||{}).forEach(f=>{
+      o.compromisoLog[f] = (d.compromisoLog[f]||[]).map(x=>({
+        h: x.ts ? new Date(x.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '',
+        de: x.antes && x.antes.des ? x.antes.des.monto : 0,
+        a: x.despues && x.despues.des ? x.despues.des.monto : 0,
+        causa: x.motivo || '', tipo: x.tipo
+      }));
+    });
+    return o;
+  }
+
   async function fetchFromBuzon(silent){
     if(!BUZON_URL){ if(!silent) toast('Buzón no configurado'); return; }
     setBuzonLoading(true);
@@ -587,17 +660,18 @@
         if(!entry || !entry.data) return;
         const displayName = entry.sucursalOriginal || rawKey;
         const key = normSucursal(displayName);
+        const dat = adaptV2(entry.data);
         const before = branches[key] ? JSON.stringify(stripDirectorOnly(branches[key])) : null;
-        const after = JSON.stringify(stripDirectorOnly(entry.data));
+        const after = JSON.stringify(stripDirectorOnly(dat));
         if(before !== after) changed.push(displayName);
-        mergeIntoArchive(key, entry.data.gerente, entry.data.crecimiento);
-        adoptBranch(key, entry.data);
+        mergeIntoArchive(key, dat.gerente, dat.crecimiento);
+        adoptBranch(key, dat);
         count++;
       });
       const nuevosCortes = {};
       Object.keys(json.cortesHoy||{}).forEach(rawKey=>{
         const key = normSucursal(rawKey);
-        nuevosCortes[key] = (json.cortesHoy[rawKey]||[]).map(c=>c.data).filter(Boolean);
+        nuevosCortes[key] = (json.cortesHoy[rawKey]||[]).map(c=>c.data ? adaptV2(c.data) : null).filter(Boolean);
       });
       cortesHoyPorSucursal = nuevosCortes;
       saveBranches(branches);
@@ -678,7 +752,7 @@
       archive.push({
         sucursal, gerente, id: e.id, name: e.name, tipo: e.tipo, status: e.status,
         monto: e.monto, statusDate: e.statusDate, originDate: e.originDate,
-        comments: e.comments||[]
+        comments: e.comments||[], motivo: e.motivo||''
       });
       existingKeys.add(key);
     });
@@ -709,7 +783,7 @@
       const reader = new FileReader();
       reader.onload = ()=>{
         try{
-          const data = JSON.parse(reader.result);
+          const data = adaptV2(JSON.parse(reader.result));
           if(data.formato === 'consola-gp-export-v1'){
             // Paquete completo de ESTA Consola (para seguir en otra computadora) —
             // reemplaza todo, con el mismo candado de "esto es más viejo que lo que
@@ -813,6 +887,7 @@
     let sums = {}; METRICS.forEach(m=> sums[m.key] = {real:0, compromiso:0, total:0, totalMeta:0});
     let otrosSums = {}; OTROS_INDICADORES.forEach(o=> otrosSums[o.key] = {count:0, monto:0});
     let totalPosibleCount = 0, totalPosibleMonto = 0, totalPorDesembolsarCount = 0, totalPorDesembolsarMonto = 0;
+    let aMesaRealG=0, aMesaProyG=0, rezagG=0;
     // Meta semanal general — se suma la meta que cada gerente capturó para ESTA semana
     // (lunes de hoy) contra lo que de verdad llevan desembolsado en la semana.
     const monToday = mondayOf(today);
@@ -836,6 +911,8 @@
       const crec = data.crecimiento || [];
       const activos = crec.filter(e=>!isCrecDone(e));
       totalPosibleCount += activos.length;
+      if(dia && dia.aMesa){ aMesaRealG += dia.aMesa.real||0; aMesaProyG += dia.aMesa.proy||0; }
+      if(data.v2){ rezagG += (data.pipeV2||[]).filter(p=>!(p.h&&(p.h.de||p.h.re)) && v2Lvl(p,today)===2).length; }
       totalPosibleMonto += activos.reduce((s,e)=>s+(e.monto||0),0);
       const porDesembolsar = crec.filter(e=>!isCrecDone(e) && e.porDesembolsar);
       totalPorDesembolsarCount += porDesembolsar.length;
@@ -893,7 +970,7 @@
             <span class="tg-sec-chip ${gapClass(d.real,total)}">${pct===null?'—':pct+'%'}</span>
           </span>
         </div>`;
-        return row('cover', cover, pctCover) + row('meta', meta, pctMeta);
+        return row('', cover, pctCover);
       }
       if(m.noCompromiso){
         // Fichas del día / Mora 1-7: sin compromiso — se muestra Real/Total y su %.
@@ -931,7 +1008,7 @@
       <div class="tg-label">Total general — ${nBranches} sucursal(es) · hoy ${fmtDate(today)}</div>
       <div class="tg-hero-wrap">
         ${heroRow('desembolso','💰','Desembolso')}
-        ${heroRow('mora8mas','📉','Mora 8+ días ($)')}
+        ${heroRow('mora8mas','📉','Mora 8–60 días ($)')}
       </div>
       ${metaHTML}
       <div class="tg-secondary">
@@ -941,6 +1018,10 @@
       </div>
       <div class="tg-secondary" style="margin-top:6px;">
         ${OTROS_INDICADORES.map(o=>otroRow(o.key, o.icon, o.label)).join('')}
+      </div>
+      <div class="tg-secondary" style="margin-top:6px;">
+        <div class="tg-sec-row"><span class="tg-sec-label">📤 Subió hoy a mesa</span><span class="tg-sec-right"><span class="tg-sec-val">${fmtMoney(aMesaRealG)} / ${fmtMoney(aMesaProyG)}</span><span class="tg-sec-chip ${gapClass(aMesaRealG,aMesaProyG)}">${pctOf(aMesaRealG,aMesaProyG)===null?'—':pctOf(aMesaRealG,aMesaProyG)+'%'}</span></span></div>
+        <div class="tg-sec-row"><span class="tg-sec-label">⚠ Expedientes con rezago (rojo)</span><span class="tg-sec-val" style="${rezagG?'color:#b3261e;font-weight:800;':''}">${rezagG}</span></div>
       </div>
       <div class="tg-crec-row">
         <div class="tg-crec-stat"><b>${totalPosibleCount}</b><span>créditos posibles (${fmtMoney(totalPosibleMonto)})</span></div>
@@ -960,6 +1041,7 @@
     let fichas = {real:0, total:0};
     let approvals = {real:0, total:0};
     let nBranches = 0, nStale = 0;
+    let aMesa = {real:0, proy:0}, mora860 = {real:0, comp:0}, rezag = 0;
 
     Object.values(branches).forEach(data=>{
       const dateKey = data.marcadorDias && data.marcadorDias[today] ? today : latestMarcadorDate(data);
@@ -968,6 +1050,9 @@
       if(dateKey!==today) nStale++;
       const dia = data.marcadorDias[dateKey];
 
+      if(dia && dia.aMesa){ aMesa.real += dia.aMesa.real||0; aMesa.proy += dia.aMesa.proy||0; }
+      if(dia && dia.metrics && dia.metrics.mora8mas){ mora860.real += dia.metrics.mora8mas.real||0; mora860.comp += dia.metrics.mora8mas.compromiso||0; }
+      if(data.v2){ rezag += (data.pipeV2||[]).filter(p=>!(p.h&&(p.h.de||p.h.re)) && v2Lvl(p,dateKey)===2).length; }
       const crec = data.crecimiento || [];
       const desembHoy = crec.filter(e=>e.status==='desembolsado' && e.statusDate===dateKey);
       desembCount += desembHoy.length;
@@ -995,10 +1080,12 @@
     out += `Por firmar: ${otrosSums.por_firmar.count} crédito(s) — ${fmtMoney(otrosSums.por_firmar.monto)}\n`;
     out += `En mesa: ${otrosSums.en_mesa.count} crédito(s) — ${fmtMoney(otrosSums.en_mesa.monto)}\n`;
     out += `Por enviar: ${otrosSums.por_enviar.count} crédito(s) — ${fmtMoney(otrosSums.por_enviar.monto)}\n`;
-    out += `Rechazados: ${otrosSums.rechazado.count} crédito(s) — ${fmtMoney(otrosSums.rechazado.monto)}\n\n`;
+    out += `Subió hoy a mesa: ${fmtMoney(aMesa.real)} de ${fmtMoney(aMesa.proy)} proyectado\n`;
+    out += `Expedientes con rezago: ${rezag}\n`;
+    out += `Rechazados (semana): ${otrosSums.rechazado.count} crédito(s) — ${fmtMoney(otrosSums.rechazado.monto)}\n\n`;
     out += `Fichas del día: ${fichas.real}/${fichas.total}${fichasPct===null?'':` (${fichasPct}%)`}\n`;
     out += `Approvals: ${approvals.real}/${approvals.total}${approvalsPct===null?'':` (${approvalsPct}%)`}\n`;
-    out += `8 a 60:`;
+    out += `Mora 8–60: ${fmtMoney(mora860.real)}/${fmtMoney(mora860.comp)}`;
     return out;
   }
   function copyDaySummaryFallback(text){
@@ -1134,8 +1221,9 @@
   // es lo que ya de verdad está en mesa. Van aparte de las 4 cubetas porque cada
   // una cruza las 4 a la vez. Misma función genérica para no duplicar el código.
   const STAGE_TILES = [
-    {status:'promesa_mesa', icon:'📝', label:'Se sube a mesa',           color:'#C2691E', tileId:'promesaTile', detailId:'promesaDetail', innerId:'promesaTileInner'},
-    {status:'analisis',     icon:'📨', label:'Enviados a mesa (análisis)', color:'#B8860B', tileId:'mesaTile',    detailId:'mesaDetail',    innerId:'mesaTileInner'},
+    {status:'promesa_mesa', icon:'📝', label:'Por enviar (se sube a mesa)', color:'#C2691E', tileId:'promesaTile', detailId:'promesaDetail', innerId:'promesaTileInner'},
+    {status:'analisis',     icon:'📨', label:'En mesa (análisis)', color:'#B8860B', tileId:'mesaTile',    detailId:'mesaDetail',    innerId:'mesaTileInner'},
+    {status:'por_firmar',   icon:'✍️', label:'Por firmar',               color:'#1F6F5C', tileId:'firmaTile',   detailId:'firmaDetail',   innerId:'firmaTileInner'},
   ];
   let openStage = {}; // solo en memoria — qué tarjeta de etapa tiene el detalle desplegado
 
@@ -1265,7 +1353,7 @@
           return `
           <div class="cubeta-detail-item">
             <span class="cdi-branch">${escapeHTML(e.sucursal)} · ${u?u.label:e.tipo}</span>
-            <b>${escapeHTML(e.name)}</b> — ${e.monto?fmtMoney(e.monto):'sin monto'} — Día ${days}${stale?` — ⚠ ${crecStaleDays(e,today)}d sin actualizar`:''}
+            <b>${escapeHTML(e.name)}</b> — ${e.monto?fmtMoney(e.monto):'sin monto'} — ${crecStaleDays(e,today)===0?'entró hoy':crecStaleDays(e,today)+'d en esta etapa'}${stale?' — <b style="color:#b3261e">⚠ rezago</b>':''}
           </div>`;
         }).join('') : `<div class="alert-empty">Nada en esta etapa por ahora.</div>`}
       </div>`;
@@ -1661,6 +1749,44 @@
     }).join('');
   }
 
+  // Etapas del pipeline (solo Agenda v2): subió hoy a mesa vs proyectado, y listas por etapa
+  // con días en la etapa — ámbar/rojo con los mismos límites que la Agenda — más rechazos
+  // de la semana con su motivo.
+  function v2EtapasHTML(sucursal, data, today){
+    if(!data.v2) return '';
+    const pip = data.pipeV2 || [];
+    const dia = data.marcadorDias && data.marcadorDias[today];
+    let h = '';
+    if(dia && dia.aMesa){
+      const a = dia.aMesa, pct = pctOf(a.real, a.proy);
+      h += `<div class="mini-metrics" style="margin-top:4px;"><div class="mm-row">
+        <span class="mm-label">📤 Subió hoy a mesa</span>
+        <span class="mm-val">${fmtMoney(a.real)} / ${fmtMoney(a.proy)} <span style="opacity:.7">(${a.realN||0} de ${a.proyN||0})</span></span>
+        <span class="mm-chip ${gapClass(a.real,a.proy)}">${pct===null?'—':pct+'%'}</span>
+      </div></div>`;
+    }
+    const col = l => l===2 ? 'color:#b3261e;font-weight:800;' : (l===1 ? 'color:#b26a00;font-weight:700;' : '');
+    [['Por enviar','📤'],['En mesa','🏦'],['Por firmar','✍️']].forEach(([st,icon])=>{
+      const list = pip.filter(p=>v2Stage(p)===st).sort((a,b)=>v2DaysInStage(b,today)-v2DaysInStage(a,today));
+      const worst = list.reduce((m,p)=>Math.max(m,v2Lvl(p,today)),0);
+      h += renderCompromisoBox(sucursal, 'v2-'+st, list, {
+        icon, label: st + (worst===2?' · ⚠ con rezago':''), cls: worst===2 ? 'danger' : (worst===1 ? 'warn' : 'today'),
+        itemBuilder: p => {
+          const n = v2DaysInStage(p, today), as = asesorNameFor(data, p.asesor);
+          const nota = (p.notas&&p.notas.length) ? p.notas[p.notas.length-1].x : '';
+          return `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${p.monto?fmtMoney(p.monto):'sin monto'}${as?' · '+escapeHTML(as):''} — <span style="${col(v2Lvl(p,today))}">${n===0?'hoy':n+'d en '+st}</span>${nota?' — "'+escapeHTML(nota)+'"':''}</div>`;
+        }
+      });
+    });
+    const mon = mondayOf(today);
+    const rech = pip.filter(p=>p.h && p.h.re && p.h.re.d>=mon && p.h.re.d<=today);
+    h += renderCompromisoBox(sucursal, 'v2-rech', rech, {
+      icon:'⛔', label:'Rechazados de la semana', cls:'danger',
+      itemBuilder: p => `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${p.monto?fmtMoney(p.monto):'sin monto'} — ${fmtDate(p.h.re.d)} — ${p.motivo?escapeHTML(p.motivo):'<b>sin motivo</b>'}</div>`
+    });
+    return h;
+  }
+
   function renderBranches(){
     const wrap = $('#branchesWrap');
     const today = todayStr();
@@ -1693,7 +1819,7 @@
               <span class="mm-val ${signedCls}">${fmtN(d.real)} / ${fmtN(total)}</span>
               <span class="mm-chip ${gapClass(d.real,total)}">${pct===null?'—':pct+'%'}</span>
             </div>`;
-            return row('cover', cover, pctCover) + row('meta', meta, pctMeta);
+            return row('', cover, pctCover);
           }
           if(m.noCompromiso){
             // Fichas del día: sin compromiso — Real/Total y % = Real/Total.
@@ -1794,6 +1920,7 @@
         ${compromisoAlertaHTML(compromisoAlerta(sucursal, data))}
         ${avanceDelDiaHTML(sucursal, today)}
         ${otrosHTML ? `<div class="mini-metrics" style="margin-top:4px;">${otrosHTML}</div>` : ''}
+        ${v2EtapasHTML(sucursal, data, today)}
         ${todayHTML}
         ${overdueHTML}
         ${staleHTML}
