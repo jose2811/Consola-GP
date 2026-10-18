@@ -378,7 +378,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.1.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.1.1 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -620,7 +620,7 @@
     o.crecimiento = o.pipeV2.map(p=>{
       const st = v2Stage(p), last = v2Last(p), pe = p.h && p.h.pe;
       return {
-        id:p.id, name:p.name, tipo:p.tipo||'nuevo', monto:p.monto||0, asesorId:p.asesor,
+        id:p.id, name:p.name, tipo:p.tipo||'nuevo', monto:(p.h&&p.h.de&&p.montoAut!=null)?p.montoAut:(p.monto||0), montoSol:p.monto||0, asesorId:p.asesor,
         status: V2_STATUS[st] || 'promesa_mesa',
         statusDate: last ? last.d : (pe ? pe.d : hoy),
         originDate: pe ? pe.d : hoy,

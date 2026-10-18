@@ -13,7 +13,7 @@
 //
 // IMPORTANTE: subir CACHE_VERSION cada vez que se publique un cambio grande,
 // para que los cachés viejos se limpien solos en el siguiente open.
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `consola-gp-${CACHE_VERSION}`;
 const CORE_ASSETS = [
   './',
