@@ -350,6 +350,8 @@
     <div class="cubeta-grid" id="cubetaGrid"></div>
     <div class="cubeta-detail" id="cubetaDetail" style="display:none;"></div>
     <div class="section-title">Etapa crítica — todas las sucursales</div>
+    <div id="subioTile"></div>
+    <div class="cubeta-detail" id="subioDetail" style="display:none;"></div>
     <div id="promesaTile"></div>
     <div class="cubeta-detail" id="promesaDetail" style="display:none;"></div>
     <div id="mesaTile"></div>
@@ -376,7 +378,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.0.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.1.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -458,7 +460,7 @@
   const OTROS_INDICADORES = [
     {key:'por_firmar', icon:'✍️', label:'Por firmar'},
     {key:'en_mesa',    icon:'🏦', label:'En mesa'},
-    {key:'por_enviar', icon:'📤', label:'Por enviar'},
+    {key:'por_enviar', icon:'📤', label:'Pendiente de subir a mesa'},
     {key:'rechazado',  icon:'⛔', label:'Rechazados (semana)'},
   ];
   const CREC_STALE_DAYS = 3;
@@ -496,7 +498,7 @@
     {key:'lnr',         color:'#A1743D', label:'LNR',              icon:'🎯'},
     {key:'leaddigital', color:'#6B4FA0', label:'Leads digitales',  icon:'📲'},
   ];
-  const STATUS_LABELS = { pendiente:'Pendiente', contactado:'Contactado', consultado:'Consultado', evaluacion:'Evaluación', validacion:'Validación', promesa_mesa:'Por enviar (se sube a mesa)', por_firmar:'Por firmar', analisis:'Enviado a análisis', desembolsado:'Desembolsado', rechazado:'Rechazado' };
+  const STATUS_LABELS = { pendiente:'Pendiente', contactado:'Contactado', consultado:'Consultado', evaluacion:'Evaluación', validacion:'Validación', promesa_mesa:'Pendiente de subir a mesa', por_firmar:'Por firmar', analisis:'Enviado a análisis', desembolsado:'Desembolsado', rechazado:'Rechazado' };
   function crecDaysOpen(e, today){ return dayGap(e.originDate, today) + 1; }
   function crecStaleDays(e, today){ const last = e.statusDate || e.originDate; return last ? dayGap(last, today) : 0; }
   function isCrecStale(e, today){ return !isCrecDone(e) && crecStaleDays(e, today) >= crecStaleThreshold(e); }
@@ -613,6 +615,8 @@
       o.marcadorDias[f] = dia;
     });
     o.pipeV2 = d.pipeline || [];
+    const lk = d.dias && d.dias[hoy] && d.dias[hoy].lock;
+    const lockMes = new Set((lk && lk.mesa) || []);
     o.crecimiento = o.pipeV2.map(p=>{
       const st = v2Stage(p), last = v2Last(p), pe = p.h && p.h.pe;
       return {
@@ -622,6 +626,8 @@
         originDate: pe ? pe.d : hoy,
         porDesembolsar: !!(p.h && p.h.pin) && !(p.h.de || p.h.re),
         motivo: p.motivo||'',
+        enDate: p.h && p.h.en ? p.h.en.d : null,
+        compMesaHoy: lockMes.has(p.id),
         comments: (p.notas||[]).map(n=>({text:n.x, date:n.d, time:n.t}))
       };
     });
@@ -1079,7 +1085,7 @@
     out += `Desembolsos: ${desembCount} crédito(s) — ${fmtMoney(desembMonto)}\n`;
     out += `Por firmar: ${otrosSums.por_firmar.count} crédito(s) — ${fmtMoney(otrosSums.por_firmar.monto)}\n`;
     out += `En mesa: ${otrosSums.en_mesa.count} crédito(s) — ${fmtMoney(otrosSums.en_mesa.monto)}\n`;
-    out += `Por enviar: ${otrosSums.por_enviar.count} crédito(s) — ${fmtMoney(otrosSums.por_enviar.monto)}\n`;
+    out += `Pendiente de subir a mesa: ${otrosSums.por_enviar.count} crédito(s) — ${fmtMoney(otrosSums.por_enviar.monto)}\n`;
     out += `Subió hoy a mesa: ${fmtMoney(aMesa.real)} de ${fmtMoney(aMesa.proy)} proyectado\n`;
     out += `Expedientes con rezago: ${rezag}\n`;
     out += `Rechazados (semana): ${otrosSums.rechazado.count} crédito(s) — ${fmtMoney(otrosSums.rechazado.monto)}\n\n`;
@@ -1221,7 +1227,8 @@
   // es lo que ya de verdad está en mesa. Van aparte de las 4 cubetas porque cada
   // una cruza las 4 a la vez. Misma función genérica para no duplicar el código.
   const STAGE_TILES = [
-    {status:'promesa_mesa', icon:'📝', label:'Por enviar (se sube a mesa)', color:'#C2691E', tileId:'promesaTile', detailId:'promesaDetail', innerId:'promesaTileInner'},
+    {status:'subio_hoy', custom:true, icon:'📤', label:'Subieron hoy a mesa', color:'#1E5FA8', tileId:'subioTile', detailId:'subioDetail', innerId:'subioTileInner'},
+    {status:'promesa_mesa', icon:'📝', label:'Pendiente de subir a mesa', color:'#C2691E', tileId:'promesaTile', detailId:'promesaDetail', innerId:'promesaTileInner'},
     {status:'analisis',     icon:'📨', label:'En mesa (análisis)', color:'#B8860B', tileId:'mesaTile',    detailId:'mesaDetail',    innerId:'mesaTileInner'},
     {status:'por_firmar',   icon:'✍️', label:'Por firmar',               color:'#1F6F5C', tileId:'firmaTile',   detailId:'firmaDetail',   innerId:'firmaTileInner'},
   ];
@@ -1306,10 +1313,14 @@
 
   function renderStageTile(cfg){
     const wrap = $('#'+cfg.tileId);
-    let count = 0, monto = 0;
+    let count = 0, monto = 0, nF = 0, mF = 0;
+    const todayT = todayStr();
     Object.values(branches).forEach(data=>{
       (data.crecimiento||[]).forEach(e=>{
-        if(e.status===cfg.status){ count++; monto += (e.monto||0); }
+        if(cfg.custom){
+          const g = subioGrupo(e, todayT);
+          if(g==='ok'){ count++; monto += (e.monto||0); } else if(g==='falta'){ nF++; mF += (e.monto||0); }
+        } else if(e.status===cfg.status){ count++; monto += (e.monto||0); }
       });
     });
     const isOpen = !!openStage[cfg.status];
@@ -1318,7 +1329,7 @@
         <div class="n">${count}</div>
         <div class="txt">
           <div class="l">${cfg.icon} ${cfg.label}</div>
-          <div class="m">${fmtMoney(monto)} tentativo — toca para ver el detalle</div>
+          <div class="m">${cfg.custom ? `${fmtMoney(monto)} · faltan ${nF} (${fmtMoney(mF)}) — toca para ver el detalle` : `${fmtMoney(monto)} tentativo — toca para ver el detalle`}</div>
         </div>
       </div>`;
     $('#'+cfg.innerId).addEventListener('click', ()=>{
@@ -1328,6 +1339,11 @@
     });
     renderStageDetail(cfg);
   }
+  function subioGrupo(e, today){
+    if(e.enDate===today) return 'ok';
+    if(e.compMesaHoy && !e.enDate && !isCrecDone(e)) return 'falta';
+    return null;
+  }
   function renderStageDetail(cfg){
     const wrap = $('#'+cfg.detailId);
     if(!openStage[cfg.status]){ wrap.style.display='none'; wrap.innerHTML=''; return; }
@@ -1335,7 +1351,8 @@
     let items = [];
     Object.entries(branches).forEach(([sucursal,data])=>{
       (data.crecimiento||[]).forEach(e=>{
-        if(e.status===cfg.status) items.push({...e, sucursal});
+        if(cfg.custom){ const g = subioGrupo(e, today); if(g) items.push({...e, sucursal, _g:g}); }
+        else if(e.status===cfg.status) items.push({...e, sucursal});
       });
     });
     // Ordenado por oficina primero (y por monto dentro de cada una) — para que
@@ -1353,7 +1370,7 @@
           return `
           <div class="cubeta-detail-item">
             <span class="cdi-branch">${escapeHTML(e.sucursal)} · ${u?u.label:e.tipo}</span>
-            <b>${escapeHTML(e.name)}</b> — ${e.monto?fmtMoney(e.monto):'sin monto'} — ${crecStaleDays(e,today)===0?'entró hoy':crecStaleDays(e,today)+'d en esta etapa'}${stale?' — <b style="color:#b3261e">⚠ rezago</b>':''}
+            ${e._g==='ok'?'✅':(e._g==='falta'?'⏳':'')} <b>${escapeHTML(e.name)}</b> — ${e.monto?fmtMoney(e.monto):'sin monto'} — ${e._g==='ok'?'ya subió':(e._g==='falta'?'falta subir':crecStaleDays(e,today)===0?'entró hoy':crecStaleDays(e,today)+'d en esta etapa')}${stale&&!e._g?' — <b style="color:#b3261e">⚠ rezago</b>':''}
           </div>`;
         }).join('') : `<div class="alert-empty">Nada en esta etapa por ahora.</div>`}
       </div>`;
@@ -1752,6 +1769,7 @@
   // Etapas del pipeline (solo Agenda v2): subió hoy a mesa vs proyectado, y listas por etapa
   // con días en la etapa — ámbar/rojo con los mismos límites que la Agenda — más rechazos
   // de la semana con su motivo.
+  function lockMesHoy(data){ const f=(data.exportedAt?toDateStr(new Date(data.exportedAt)):todayStr()); const lk=data.dias&&data.dias[f]&&data.dias[f].lock; return new Set((lk&&lk.mesa)||[]); }
   function v2EtapasHTML(sucursal, data, today){
     if(!data.v2) return '';
     const pip = data.pipeV2 || [];
@@ -1765,16 +1783,26 @@
         <span class="mm-chip ${gapClass(a.real,a.proy)}">${pct===null?'—':pct+'%'}</span>
       </div></div>`;
     }
+    const subieron = pip.filter(p=>p.h && p.h.en && p.h.en.d===today);
+    const faltan = pip.filter(p=>lockMesHoy(data).has(p.id) && !(p.h && (p.h.en||p.h.de||p.h.re)));
+    h += renderCompromisoBox(sucursal, 'v2-subio', subieron, {
+      icon:'✅', label:'Ya subieron hoy a mesa', cls:'today',
+      itemBuilder: p => `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${fmtMoney(p.monto)} — ${p.h.en.t||''}</div>`
+    });
+    h += renderCompromisoBox(sucursal, 'v2-falta', faltan, {
+      icon:'⏳', label:'Faltan por subir (compromiso de hoy)', cls: faltan.length?'warn':'today',
+      itemBuilder: p => `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${fmtMoney(p.monto)}${asesorNameFor(data,p.asesor)?' · '+escapeHTML(asesorNameFor(data,p.asesor)):''}</div>`
+    });
     const col = l => l===2 ? 'color:#b3261e;font-weight:800;' : (l===1 ? 'color:#b26a00;font-weight:700;' : '');
     [['Por enviar','📤'],['En mesa','🏦'],['Por firmar','✍️']].forEach(([st,icon])=>{
       const list = pip.filter(p=>v2Stage(p)===st).sort((a,b)=>v2DaysInStage(b,today)-v2DaysInStage(a,today));
       const worst = list.reduce((m,p)=>Math.max(m,v2Lvl(p,today)),0);
       h += renderCompromisoBox(sucursal, 'v2-'+st, list, {
-        icon, label: st + (worst===2?' · ⚠ con rezago':''), cls: worst===2 ? 'danger' : (worst===1 ? 'warn' : 'today'),
+        icon, label: (st==='Por enviar'?'Pendiente de subir a mesa':st) + (worst===2?' · ⚠ con rezago':''), cls: worst===2 ? 'danger' : (worst===1 ? 'warn' : 'today'),
         itemBuilder: p => {
           const n = v2DaysInStage(p, today), as = asesorNameFor(data, p.asesor);
           const nota = (p.notas&&p.notas.length) ? p.notas[p.notas.length-1].x : '';
-          return `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${p.monto?fmtMoney(p.monto):'sin monto'}${as?' · '+escapeHTML(as):''} — <span style="${col(v2Lvl(p,today))}">${n===0?'hoy':n+'d en '+st}</span>${nota?' — "'+escapeHTML(nota)+'"':''}</div>`;
+          return `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${p.monto?fmtMoney(p.monto):'sin monto'}${as?' · '+escapeHTML(as):''} — <span style="${col(v2Lvl(p,today))}">${n===0?'hoy':n+'d en '+(st==='Por enviar'?'pendiente':st)}</span>${nota?' — "'+escapeHTML(nota)+'"':''}</div>`;
         }
       });
     });
@@ -1881,7 +1909,7 @@
       const allCommitments = getTodayCommitments(crec);
       const overdueCommitments = getOverdueCommitments(crec, today);
       const todayHTML = renderCompromisoBox(sucursal, 'today', allCommitments, {
-        icon:'📅', label:'Desembolsos del día', cls:'today',
+        icon:'📅', label:'Desembolsos pendientes (compromiso)', cls:'today',
         itemBuilder: e => {
           const days = crecDaysOpen(e, today);
           return `<div class="branch-gap-item"><b>${escapeHTML(e.name)}</b> — ${e.monto?fmtMoney(e.monto):'sin monto'} — Día ${days}</div>`;
