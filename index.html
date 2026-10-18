@@ -121,6 +121,9 @@
   .tg-meta-bar{height:9px;background:rgba(255,255,255,.12);border-radius:99px;overflow:hidden;margin-bottom:6px;}
   .tg-meta-bar-fill{height:100%;background:var(--m4,#3fa796);border-radius:99px;transition:width .3s ease;}
   .tg-meta-note{color:rgba(255,255,255,.55);font-size:10.5px;}
+  .tg-mesa-fill{height:100%;border-radius:99px;transition:width .3s ease;}
+  .tg-mesa-fill.ok{background:#3fa796;}.tg-mesa-fill.warn{background:#e0a526;}.tg-mesa-fill.low{background:#e5484d;}.tg-mesa-fill.empty{background:#8a8f98;}
+  .mm-bar{height:6px;background:rgba(128,128,128,.22);border-radius:99px;overflow:hidden;margin:3px 0 2px;}
   .tg-meta-empty{color:rgba(255,255,255,.55);font-size:11.5px;font-style:italic;}
 
   .cubeta-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
@@ -378,7 +381,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.1.3 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.2.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -893,7 +896,7 @@
     let sums = {}; METRICS.forEach(m=> sums[m.key] = {real:0, compromiso:0, total:0, totalMeta:0});
     let otrosSums = {}; OTROS_INDICADORES.forEach(o=> otrosSums[o.key] = {count:0, monto:0});
     let totalPosibleCount = 0, totalPosibleMonto = 0, totalPorDesembolsarCount = 0, totalPorDesembolsarMonto = 0;
-    let aMesaRealG=0, aMesaProyG=0, rezagG=0;
+    let aMesaRealG=0, aMesaProyG=0, aMesaRealNG=0, aMesaProyNG=0, rezagG=0;
     // Meta semanal general — se suma la meta que cada gerente capturó para ESTA semana
     // (lunes de hoy) contra lo que de verdad llevan desembolsado en la semana.
     const monToday = mondayOf(today);
@@ -917,7 +920,7 @@
       const crec = data.crecimiento || [];
       const activos = crec.filter(e=>!isCrecDone(e));
       totalPosibleCount += activos.length;
-      if(dia && dia.aMesa){ aMesaRealG += dia.aMesa.real||0; aMesaProyG += dia.aMesa.proy||0; }
+      if(dia && dia.aMesa){ aMesaRealG += dia.aMesa.real||0; aMesaProyG += dia.aMesa.proy||0; aMesaRealNG += dia.aMesa.realN||0; aMesaProyNG += dia.aMesa.proyN||0; }
       if(data.v2){ rezagG += (data.pipeV2||[]).filter(p=>!(p.h&&(p.h.de||p.h.re)) && v2Lvl(p,today)===2).length; }
       totalPosibleMonto += activos.reduce((s,e)=>s+(e.monto||0),0);
       const porDesembolsar = crec.filter(e=>!isCrecDone(e) && e.porDesembolsar);
@@ -997,6 +1000,15 @@
       return `<div class="tg-sec-row"><span class="tg-sec-label">${icon} ${label}</span><span class="tg-sec-val">${d.count} crédito(s) — ${fmtMoney(d.monto)}</span></div>`;
     }
 
+
+    const mesaPctG = pctOf(aMesaRealG, aMesaProyG), mesaGc = gapClass(aMesaRealG, aMesaProyG);
+    const mesaHTML = `
+      <div class="tg-meta">
+        <div class="tg-meta-label">📤 Subir a mesa hoy (compromiso del día)</div>
+        <div class="tg-meta-bignum"><span class="n">${fmtMoney(aMesaRealG)}</span><span class="of">de ${fmtMoney(aMesaProyG)} · ${aMesaRealNG} de ${aMesaProyNG} expedientes</span></div>
+        <div class="tg-meta-bar"><div class="tg-mesa-fill ${mesaGc}" style="width:${Math.min(100,mesaPctG||0)}%"></div></div>
+        <div class="tg-meta-note">${mesaPctG===null?'Sin compromiso de mesa fijado todavía':mesaPctG+'% del compromiso'+(mesaPctG>100?' · superado 💪':'')}</div>
+      </div>`;
     const metaPct = metaGeneral>0 ? Math.min(100, Math.round((realAcumGeneral/metaGeneral)*100)) : 0;
     const metaHTML = metaGeneral>0 ? `
       <div class="tg-meta">
@@ -1016,6 +1028,7 @@
         ${heroRow('desembolso','💰','Desembolso')}
         ${heroRow('mora8mas','📉','Mora 8–60 días ($)')}
       </div>
+      ${mesaHTML}
       ${metaHTML}
       <div class="tg-secondary">
         ${secRow('fichas','Fichas del día')}
@@ -1026,8 +1039,7 @@
         ${OTROS_INDICADORES.map(o=>otroRow(o.key, o.icon, o.label)).join('')}
       </div>
       <div class="tg-secondary" style="margin-top:6px;">
-        <div class="tg-sec-row"><span class="tg-sec-label">📤 Subió hoy a mesa</span><span class="tg-sec-right"><span class="tg-sec-val">${fmtMoney(aMesaRealG)} / ${fmtMoney(aMesaProyG)}</span><span class="tg-sec-chip ${gapClass(aMesaRealG,aMesaProyG)}">${pctOf(aMesaRealG,aMesaProyG)===null?'—':pctOf(aMesaRealG,aMesaProyG)+'%'}</span></span></div>
-        <div class="tg-sec-row"><span class="tg-sec-label">⚠ Expedientes con rezago (rojo)</span><span class="tg-sec-val" style="${rezagG?'color:#b3261e;font-weight:800;':''}">${rezagG}</span></div>
+                <div class="tg-sec-row"><span class="tg-sec-label">⚠ Expedientes con rezago (rojo)</span><span class="tg-sec-val" style="${rezagG?'color:#b3261e;font-weight:800;':''}">${rezagG}</span></div>
       </div>
       <div class="tg-crec-row">
         <div class="tg-crec-stat"><b>${totalPosibleCount}</b><span>créditos posibles (${fmtMoney(totalPosibleMonto)})</span></div>
@@ -1779,7 +1791,7 @@
         <span class="mm-label">📤 Subió hoy a mesa</span>
         <span class="mm-val">${fmtMoney(a.real)} / ${fmtMoney(a.proy)} <span style="opacity:.7">(${a.realN||0} de ${a.proyN||0})</span></span>
         <span class="mm-chip ${gapClass(a.real,a.proy)}">${pct===null?'—':pct+'%'}</span>
-      </div></div>`;
+      </div><div class="mm-bar"><div class="tg-mesa-fill ${gapClass(a.real,a.proy)}" style="width:${Math.min(100,pct||0)}%;height:100%"></div></div></div>`;
     }
     const subieron = pip.filter(p=>p.h && p.h.en && p.h.en.d===today);
     const faltan = pip.filter(p=>lockMesHoy(data).has(p.id) && !(p.h && (p.h.en||p.h.de||p.h.re)));
