@@ -378,7 +378,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.1.2 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.1.3 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1085,13 +1085,11 @@
     out += `Desembolsos: ${desembCount} crédito(s) — ${fmtMoney(desembMonto)}\n`;
     out += `Por firmar: ${otrosSums.por_firmar.count} crédito(s) — ${fmtMoney(otrosSums.por_firmar.monto)}\n`;
     out += `En mesa: ${otrosSums.en_mesa.count} crédito(s) — ${fmtMoney(otrosSums.en_mesa.monto)}\n`;
-    out += `Pendiente de subir a mesa: ${otrosSums.por_enviar.count} crédito(s) — ${fmtMoney(otrosSums.por_enviar.monto)}\n`;
-    out += `Subió hoy a mesa: ${fmtMoney(aMesa.real)} de ${fmtMoney(aMesa.proy)} proyectado\n`;
-    out += `Expedientes con rezago: ${rezag}\n`;
-    out += `Rechazados (semana): ${otrosSums.rechazado.count} crédito(s) — ${fmtMoney(otrosSums.rechazado.monto)}\n\n`;
+    out += `Por enviar: ${otrosSums.por_enviar.count} crédito(s) — ${fmtMoney(otrosSums.por_enviar.monto)}\n`;
+    out += `Rechazados: ${otrosSums.rechazado.count} crédito(s) — ${fmtMoney(otrosSums.rechazado.monto)}\n\n`;
     out += `Fichas del día: ${fichas.real}/${fichas.total}${fichasPct===null?'':` (${fichasPct}%)`}\n`;
     out += `Approvals: ${approvals.real}/${approvals.total}${approvalsPct===null?'':` (${approvalsPct}%)`}\n`;
-    out += `Mora 8–60: ${fmtMoney(mora860.real)}/${fmtMoney(mora860.comp)}`;
+    out += `8 a 60: ${fmtMoney(mora860.real)}`;
     return out;
   }
   function copyDaySummaryFallback(text){
