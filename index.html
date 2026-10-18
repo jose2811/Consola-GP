@@ -378,7 +378,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.1.1 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.1.2 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -585,7 +585,7 @@
   function v2Lvl(p, today){ const L=V2_LIM[v2Stage(p)]; if(!L) return 0; const n=v2DaysInStage(p,today); return n>=L[1]?2:(n>=L[0]?1:0); }
   function adaptV2(d){
     if(!d || d.formato!=='agenda-gerente-v2' || d._adapted) return d;
-    const o = {...d, _adapted:true, v2:true};
+    const o = {...d, _adapted:true, v2:true, region: d.region || 'Jalisco'};
     const hoy = d.exportedAt ? toDateStr(new Date(d.exportedAt)) : todayStr();
     o.asesores = (d.asesores||[]).map(a=>({...a}));
     o.metasSemanales = {};
