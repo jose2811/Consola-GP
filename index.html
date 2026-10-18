@@ -381,7 +381,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.2.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.2.1 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1802,6 +1802,23 @@
     h += renderCompromisoBox(sucursal, 'v2-falta', faltan, {
       icon:'⏳', label:'Faltan por subir (compromiso de hoy)', cls: faltan.length?'warn':'today',
       itemBuilder: p => `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${fmtMoney(p.monto)}${asesorNameFor(data,p.asesor)?' · '+escapeHTML(asesorNameFor(data,p.asesor)):''}</div>`
+    });
+    const lkD = (()=>{ const f=(data.exportedAt?toDateStr(new Date(data.exportedAt)):todayStr()); const lk=data.dias&&data.dias[f]&&data.dias[f].lock; return new Set((lk&&lk.des)||[]); })();
+    const amtP = p => (p.h&&p.h.de&&p.montoAut!=null)?p.montoAut:(p.monto||0);
+    const desHoy = pip.filter(p=>p.h && p.h.de && p.h.de.d===today);
+    const desPend = pip.filter(p=>lkD.has(p.id) && !(p.h&&(p.h.de||p.h.re)));
+    const desRech = pip.filter(p=>lkD.has(p.id) && p.h && p.h.re);
+    h += renderCompromisoBox(sucursal, 'v2-deshoy', desHoy, {
+      icon:'💰', label:'Desembolsados hoy', cls:'today',
+      itemBuilder: p => `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${fmtMoney(amtP(p))}${(p.montoAut!=null&&p.montoAut!==p.monto)?' (solicitado '+fmtMoney(p.monto)+')':''}${asesorNameFor(data,p.asesor)?' · '+escapeHTML(asesorNameFor(data,p.asesor)):''} — ${p.h.de.t||''}</div>`
+    });
+    h += renderCompromisoBox(sucursal, 'v2-despend', desPend, {
+      icon:'⏳', label:'Pendiente del compromiso de desembolso', cls: desPend.length?'warn':'today',
+      itemBuilder: p => `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${fmtMoney(p.monto)}${asesorNameFor(data,p.asesor)?' · '+escapeHTML(asesorNameFor(data,p.asesor)):''} — ${v2Stage(p)}</div>`
+    });
+    h += renderCompromisoBox(sucursal, 'v2-desrech', desRech, {
+      icon:'✗', label:'Del compromiso, rechazados', cls:'danger',
+      itemBuilder: p => `<div class="branch-gap-item"><b>${escapeHTML(p.name)}</b> — ${fmtMoney(p.monto)} — ${p.motivo?escapeHTML(p.motivo):'<b>sin motivo</b>'}</div>`
     });
     const col = l => l===2 ? 'color:#b3261e;font-weight:800;' : (l===1 ? 'color:#b26a00;font-weight:700;' : '');
     [['Por enviar','📤'],['En mesa','🏦'],['Por firmar','✍️']].forEach(([st,icon])=>{
