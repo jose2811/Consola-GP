@@ -382,7 +382,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.3.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.3.1 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1143,8 +1143,7 @@
     out += `En mesa: ${O.en_mesa.count} — ${fmtMoney(O.en_mesa.monto)}\n`;
     out += `Por firmar: ${O.por_firmar.count} — ${fmtMoney(O.por_firmar.monto)}\n`;
     out += `Rechazados (semana): ${O.rechazado.count} — ${fmtMoney(O.rechazado.monto)}\n\n`;
-    out += `*Por oficina*\n${lines.join('\n')}`;
-    return out;
+    return out.trimEnd();
   }
   function copyDaySummaryFallback(text){
     const ta = document.createElement('textarea');
