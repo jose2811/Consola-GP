@@ -312,7 +312,8 @@
   <button class="btn-refresh" id="btnActualizarBuzon">🔄 Actualizar desde el buzón</button>
   <div class="buzon-status" id="buzonStatus">Aún no se ha actualizado desde el buzón.</div>
 
-  <button class="btn-wa" id="btnCopyDaySummary" style="display:none;">📋 Copiar resumen del día (WhatsApp)</button>
+  <button class="btn-wa" id="btnCopyDaySummary" style="display:none;">📋 Copiar resumen para dirección (WhatsApp)</button>
+  <button class="btn-wa" id="btnCopyTeamSummary" style="display:none;margin-top:8px;background:var(--m1,#2b6cb0);">📣 Copiar resumen para gerentes (WhatsApp)</button>
 
   <div class="status-row">
     <span id="statusText"><b>0</b> sucursales cargadas</span>
@@ -381,7 +382,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.2.1 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.3.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1104,6 +1105,47 @@
     out += `8 a 60: ${fmtMoney(mora860.real)}`;
     return out;
   }
+  function buildTeamSummaryText(){
+    const today = todayStr();
+    const pc = (r,t)=> t ? ` (${Math.round(((r||0)/t)*100)}%)` : '';
+    const T = {des:{r:0,c:0}, fich:{r:0,t:0}, m17:{r:0,t:0}, apr:{r:0,t:0}, m860:{r:0,c:0}, mesa:{r:0,p:0}, semDes:0, semMeta:0};
+    const O = {por_firmar:{count:0,monto:0}, en_mesa:{count:0,monto:0}, por_enviar:{count:0,monto:0}, rechazado:{count:0,monto:0}};
+    const lines = []; let nStale = 0;
+    Object.keys(branches).sort().forEach(suc=>{
+      const data = branches[suc];
+      const dateKey = data.marcadorDias && data.marcadorDias[today] ? today : latestMarcadorDate(data);
+      if(!dateKey) return;
+      if(dateKey!==today) nStale++;
+      const dia = data.marcadorDias[dateKey], m = (dia&&dia.metrics)||{};
+      const des = m.desembolso||{}, fi = m.fichas||{}, m7 = m.mora17||{}, ap = m.prospeccion||{}, m8 = m.mora8mas||{}, am = (dia&&dia.aMesa)||{};
+      T.des.r += des.real||0; T.des.c += des.compromiso||0;
+      T.fich.r += fi.real||0; T.fich.t += fi.total||0;
+      T.m17.r += m7.real||0; T.m17.t += m7.total||0;
+      T.apr.r += ap.real||0; T.apr.t += ap.total||0;
+      T.m860.r += m8.real||0; T.m860.c += m8.compromiso||0;
+      T.mesa.r += am.real||0; T.mesa.p += am.proy||0;
+      if(dia && dia.otros) Object.keys(O).forEach(k=>{ const d=dia.otros[k]; if(d){ O[k].count+=d.count||0; O[k].monto+=d.monto||0; } });
+      weekDatesUpTo(today).forEach(d=>{ const dd=data.marcadorDias&&data.marcadorDias[d]; if(dd&&dd.metrics&&dd.metrics.desembolso) T.semDes += dd.metrics.desembolso.real||0; });
+      T.semMeta += metaSemanaEfectiva(data, mondayOf(today)).meta||0;
+      lines.push(`• *${data.sucursal||suc}*${dateKey!==today?' (sin actualizar hoy)':''}\n   Desemb ${fmtMoney(des.real||0)}/${fmtMoney(des.compromiso||0)}${pc(des.real,des.compromiso)} · Mesa ${fmtMoney(am.real||0)}/${fmtMoney(am.proy||0)}\n   Fichas ${fi.real||0}/${fi.total||0} · Mora 1-7 ${m7.real||0}/${m7.total||0} · Approvals ${ap.real||0}/${ap.total||0}`);
+    });
+    let out = `*Resumen del día — Equipo de gerentes*\n${fmtDate(today)}${nStale?` (${nStale} oficina(s) sin actualizar hoy)`:''}\n\n`;
+    out += `*Total región*\n`;
+    out += `Fichas del día: ${T.fich.r}/${T.fich.t}${pc(T.fich.r,T.fich.t)}\n`;
+    out += `Mora 1–7 días: ${T.m17.r}/${T.m17.t}${pc(T.m17.r,T.m17.t)}\n`;
+    out += `Desembolso: ${fmtMoney(T.des.r)}/${fmtMoney(T.des.c)}${pc(T.des.r,T.des.c)}\n`;
+    if(T.semMeta>0) out += `Meta semanal: ${fmtMoney(T.semDes)}/${fmtMoney(T.semMeta)}${pc(T.semDes,T.semMeta)}\n`;
+    out += `Approvals: ${T.apr.r}/${T.apr.t}${pc(T.apr.r,T.apr.t)}\n`;
+    out += `Mora 8–60: ${fmtMoney(T.m860.r)}/${fmtMoney(T.m860.c)}\n`;
+    out += `Subió hoy a mesa: ${fmtMoney(T.mesa.r)}/${fmtMoney(T.mesa.p)}${pc(T.mesa.r,T.mesa.p)}\n\n`;
+    out += `*Embudo*\n`;
+    out += `Pendiente de subir a mesa: ${O.por_enviar.count} — ${fmtMoney(O.por_enviar.monto)}\n`;
+    out += `En mesa: ${O.en_mesa.count} — ${fmtMoney(O.en_mesa.monto)}\n`;
+    out += `Por firmar: ${O.por_firmar.count} — ${fmtMoney(O.por_firmar.monto)}\n`;
+    out += `Rechazados (semana): ${O.rechazado.count} — ${fmtMoney(O.rechazado.monto)}\n\n`;
+    out += `*Por oficina*\n${lines.join('\n')}`;
+    return out;
+  }
   function copyDaySummaryFallback(text){
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px'; ta.style.top='0';
@@ -1112,6 +1154,19 @@
     document.body.removeChild(ta); return ok;
   }
   const btnCopyDaySummary = $('#btnCopyDaySummary');
+  const btnCopyTeamSummary = $('#btnCopyTeamSummary');
+  if(btnCopyTeamSummary){
+    btnCopyTeamSummary.addEventListener('click', async ()=>{
+      const text = buildTeamSummaryText();
+      try{
+        if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); toast('Resumen para gerentes copiado — listo para WhatsApp'); return; }
+        throw new Error('clipboard API no disponible');
+      }catch(e){
+        const ok = copyDaySummaryFallback(text);
+        toast(ok?'Resumen para gerentes copiado — listo para WhatsApp':'No se pudo copiar — selecciona el texto manualmente');
+      }
+    });
+  }
   if(btnCopyDaySummary){
     btnCopyDaySummary.addEventListener('click', async ()=>{
       const text = buildTodaySummaryText();
@@ -2119,7 +2174,7 @@
     // (se reacomodaron en la pantalla), así que controlan su propio show/hide
     // con la misma condición de siempre: solo si ya hay algo cargado.
     $('#totalGeneral').style.display = n ? '' : 'none';
-    $('#btnCopyDaySummary').style.display = n ? '' : 'none';
+    $('#btnCopyDaySummary').style.display = n ? '' : 'none'; $('#btnCopyTeamSummary').style.display = n ? '' : 'none';
     if(n){
       renderTotalGeneral();
       renderLastUpdated();
