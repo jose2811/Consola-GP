@@ -379,6 +379,7 @@
 .rnv .row .t{display:flex;justify-content:space-between;gap:8px;font-weight:700}
 .rnv .det{margin-top:8px;border-top:1px dashed #d9dde2;padding-top:8px;cursor:default}
 .rnv .det div{margin:3px 0}.rnv .warn{color:#c0392b;font-weight:700}
+.rnv .gc{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;background:#e8f3ee;color:#1F6F5C}.rnv .gc.g-espera{background:#fdf3dc;color:#8a5a00}.rnv .gc.g-prox{background:#e3edf8;color:#1E5FA8}.rnv .gc.g-no{background:#fbe6e3;color:#c0392b}.rnv .gc.g-fc{background:#eef0f3;color:#1c2430}.rnv .row.cv{border-left-color:#c0392b;background:#fff8f7}.rnv .lastnote{margin-top:5px;font-size:13px}
 .rnv .cm{background:#f6f7f9;border-radius:8px;padding:5px 8px;margin:4px 0;font-size:12px}
 .rnv .cp{width:62px;text-align:right}
 </style>
@@ -474,9 +475,10 @@ function analyze(month){
   rows.forEach(r=>{ if(!r.fin||r.fin.slice(0,7)!==month) return;
     const l=byC[r.cid], nx=l[l.indexOf(r)+1]||null, pagado=/pagad/i.test(r.st), liq=pagado?r.up:null;
     const renew=!!nx, adel=renew&&((nx.ini<ms)||(liq&&liq<ms)); // renovó = tiene un crédito posterior; adelantado = liquidó o renovó antes de que empezara el mes
-    const m=marks[r.id]||{};
-    items.push({...r,renew,adel,nx,liq,hist:l,est:renew?(adel?'adel':'ren'):(m.no?'no':(pagado?'lnr':'pend'))}); });
-  const Z=()=>({base:0,ren:0,adel:0,pt:0,lnr:0,no:0,por:0,monto:0}), add=(s,i)=>{ s.base++; s.monto+=i.mo; if(i.renew){ s.ren++; if(i.adel) s.adel++; } else { s.pt++; if(i.est==='no') s.no++; else { s.por++; if(i.est==='lnr') s.lnr++; } } };
+    const m=marks[r.id]||{}, g=m.g||(m.no?'no':''), td=today();
+    const cp=!renew&&(g==='tiempo'||g==='si'), cvenc=!renew&&!!g&&g!=='no'&&!!m.fc&&m.fc<td;
+    items.push({...r,renew,adel,nx,liq,hist:l,g,fc:m.fc||'',cp,cvenc,est:renew?(adel?'adel':'ren'):(g==='no'?'no':(pagado?'lnr':'pend'))}); });
+  const Z=()=>({base:0,ren:0,adel:0,pt:0,lnr:0,no:0,por:0,cp:0,cv:0,monto:0}), add=(s,i)=>{ if(i.cp) s.cp++; if(i.cvenc) s.cv++; s.base++; s.monto+=i.mo; if(i.renew){ s.ren++; if(i.adel) s.adel++; } else { s.pt++; if(i.est==='no') s.no++; else { s.por++; if(i.est==='lnr') s.lnr++; } } };
   const sucs={}; items.forEach(i=>add(sucs[i.suc]=sucs[i.suc]||Z(),i));
   const tot=Z(); items.forEach(i=>add(tot,i));
   const snap={}; Object.entries(sucs).forEach(([k,s])=>snap[k]={b:s.base,r:s.ren,a:s.adel}); snap['*']={b:tot.base,r:tot.ren,a:tot.adel};
@@ -484,10 +486,10 @@ function analyze(month){
 }
 
 /* ---------- pantalla ---------- */
-const Z0=()=>({base:0,ren:0,adel:0,pt:0,lnr:0,no:0,por:0});
+const Z0=()=>({base:0,ren:0,adel:0,pt:0,lnr:0,no:0,por:0,cp:0,cv:0});
 const mname=m=>{const n=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return n[+m.slice(5)-1]+' '+m.slice(0,4);};
 const EST={ren:'Renovó',adel:'Renovó (adelantado)',pend:'Pendiente',no:'No renueva',lnr:'Liquidó sin renovar'};
-const hit=(i,k)=>k==='todos'||(k==='ren'?i.renew:(k==='adel'?i.adel:(k==='pt'?!i.renew:(k==='por'?(i.est==='pend'||i.est==='lnr'):i.est===k))));
+const hit=(i,k)=>k==='todos'||k==='cp'&&i.cp||k==='cv'&&i.cvenc||k!=='cp'&&k!=='cv'&&(k==='ren'?i.renew:(k==='adel'?i.adel:(k==='pt'?!i.renew:(k==='por'?(i.est==='pend'||i.est==='lnr'):i.est===k))));
 function draw(){
   const R=$('#rnvRoot'); if(!R) return; let h='<div class="bar"><h2>🔁 Renovaciones</h2><span style="flex:1"></span><button class="b" data-a="close">Cerrar ✕</button></div>';
   h+='<div class="sub">Todo se queda en este navegador (no se manda ni se respalda en ningún lado). Sube el Excel de cartera; al subir uno nuevo se actualiza solo el avance y se conservan tus motivos y comentarios.</div>';
@@ -499,28 +501,28 @@ function draw(){
   h+='<div class="bar"><label>Vencimientos de <select class="in" data-a="month">'+months.map(m=>'<option value="'+m+'"'+(m===view.month?' selected':'')+'>'+mname(m)+'</option>').join('')+'</select></label></div>';
   const pm=pct(T.ren,T.base), pa=pct(T.ren-T.adel,T.base-T.adel), cR=Object.values(comp[view.month]||{}).reduce((a,b)=>a+(+b||0),0);
   h+='<div class="card"><div class="big"><div><div class="n">'+pf(pm)+'</div><div class="l">Renovación del mes<br>('+T.ren+' de '+T.base+' vencimientos · '+T.adel+' adelantados incluidos)</div></div><div><div class="n" style="font-size:26px">'+pf(pa)+'</div><div class="l">Avance sobre lo pendiente<br>('+(T.ren-T.adel)+' de '+(T.base-T.adel)+' · sin los adelantados)</div></div><div class="l">Monto vencimientos: <b>'+money(T.monto)+'</b>'+(cR?'<br>Compromiso región: <b>'+cR+'</b> renovaciones · real '+T.ren:'')+'</div></div></div>';
-  const G={}; A.items.forEach(i=>{ const k=view.by==='as'?(i.as||'(sin asesor)'):i.suc; const g=G[k]=G[k]||{...Z0(),suc:i.suc}; g.base++; if(i.renew){ g.ren++; if(i.adel) g.adel++; } else { g.pt++; if(i.est==='no') g.no++; else { g.por++; if(i.est==='lnr') g.lnr++; } } });
+  if(T.cv) h+='<div class="card" style="border-color:#c0392b;background:#fdf0ee"><b style="color:#c0392b">⏰ '+T.cv+' compromiso(s) vencido(s) — volver a preguntar</b> <button class="b" data-f="cv">Ver cuáles</button></div>';
+  const G={}; A.items.forEach(i=>{ const k=view.by==='as'?(i.as||'(sin asesor)'):i.suc; const g=G[k]=G[k]||{...Z0(),suc:i.suc}; g.base++; if(i.cp) g.cp++; if(i.cvenc) g.cv++; if(i.renew){ g.ren++; if(i.adel) g.adel++; } else { g.pt++; if(i.est==='no') g.no++; else { g.por++; if(i.est==='lnr') g.lnr++; } } });
   h+='<div class="bar"><button class="b'+(view.by==='suc'?' on':'')+'" data-by="suc">Por oficina / gerente</button><button class="b'+(view.by==='as'?' on':'')+'" data-by="as">Por asesor</button></div>';
   const G2='color:#8a93a0';
-  h+='<div class="card" style="overflow:auto"><table><tr><th>'+(view.by==='as'?'Asesor':'Oficina / gerente')+'</th><th title="Vencimientos del mes">Venc.</th><th title="Renovados (incluye adelantados)">Reno.</th><th class="pr" title="Venc. − Reno. − N.Ren">Por Renovar</th><th style="border-left:2px solid #1c2430;'+G2+'" title="Adelantados: ya incluidos en Reno.">Adel.</th><th style="'+G2+'" title="Liquidó sin renovar (dentro de Pend.)">Liq S/R</th><th style="'+G2+'" title="No renueva (dentro de Pend.)">N.Ren</th><th>%Mes</th><th title="Avance sobre lo pendiente (sin adelantados)">% Avance</th>'+(view.by==='suc'?'<th title="Compromiso: cuántos de los Por renovar se comprometen a renovar"># Comp.</th><th title="% de renovación si cumplen el compromiso: (Reno. + Comp.) / Venc.">% Comp.</th>':'')+'</tr>';
+  h+='<div class="card" style="overflow:auto"><table><tr><th>'+(view.by==='as'?'Asesor':'Oficina / gerente')+'</th><th title="Vencimientos del mes">Venc.</th><th title="Renovados (incluye adelantados)">Reno.</th><th class="pr" title="Venc. − Reno. − N.Ren">Por Renovar</th><th style="border-left:2px solid #1c2430;'+G2+'" title="Adelantados: ya incluidos en Reno.">Adel.</th><th style="'+G2+'" title="Liquidó sin renovar (dentro de Pend.)">Liq S/R</th><th style="'+G2+'" title="No renueva (dentro de Pend.)">N.Ren</th><th>%Mes</th><th title="Avance sobre lo pendiente (sin adelantados)">% Avance</th>'+(view.by==='suc'?'<th title="Compromiso: clientes marcados \"Renueva en tiempo\" o \"Sí renueva\" que aún no renuevan (se suma solo)"># Comp.</th><th title="% de renovación si cumplen el compromiso: (Reno. + Comp.) / Venc.">% Comp.</th>':'')+'</tr>';
   const DV='border-left:2px solid #1c2430;';
   const rowH=(lab,k,s,cmp)=>'<td>'+lab+'</td><td class="p">'+dl('todos',k,s.base)+'</td><td class="p">'+dl('ren',k,s.ren)+'</td><td class="p pr">'+dl('por',k,s.por)+'</td><td style="'+DV+G2+'">'+dl('adel',k,s.adel)+'</td><td style="'+G2+'">'+dl('lnr',k,s.lnr)+'</td><td style="'+G2+'">'+dl('no',k,s.no)+'</td><td class="p">'+pf(pct(s.ren,s.base))+'</td><td class="p">'+pf(pct(s.ren-s.adel,s.base-s.adel))+'</td>'+(cmp==null?'':cmp);
-  Object.keys(G).sort().forEach(k=>{ const s=G[k], c=(comp[view.month]||{})[k], ge=view.by==='suc'?gerOf(k):''; h+='<tr>'+rowH(esc(k)+(view.by==='as'?' <span class="sub">'+esc(s.suc)+'</span>':'')+(ge?'<div class="sub">'+esc(ge)+'</div>':''),k,s,view.by==='suc'?'<td><input class="in cp" type="number" min="0" value="'+(c==null?'':c)+'" data-comp="'+esc(k)+'">'+(c!=null&&+c>s.por?' <span class="warn" title="Más que los Por renovar">!</span>':'')+'</td><td class="p">'+(c==null||c===''?'—':pf(pct(s.ren+(+c),s.base)))+'</td>':'')+'</tr>'; });
-  const cSum=Object.values(comp[view.month]||{}).reduce((a,b)=>a+(+b||0),0), hasC=Object.keys(comp[view.month]||{}).length>0;
-  h+='<tr>'+rowH('<b>Región</b>','',T,view.by==='suc'?'<td class="p">'+(hasC?cSum:'—')+'</td><td class="p">'+(hasC?pf(pct(T.ren+cSum,T.base)):'—')+'</td>':'')+'</tr></table><div class="sub" style="margin-top:6px">Las 3 grandes: <b>Venc.</b> · <b>Reno.</b> (todo el que ya tiene crédito nuevo, incluye adelantados y regresados) · <b>Por Renovar</b> (= Venc. − Reno. − N.Ren). Después de la línea: Adel. (dentro de Reno.) · Liq S/R (liquidó sin renovar, dentro de Por Renovar) · N.Ren (no renueva, marcado por ti). # Comp. = cuántos de los Por Renovar se comprometen a renovar; % Comp. = (Reno. + # Comp.) / Venc.</div></div>';
+  Object.keys(G).sort().forEach(k=>{ const s=G[k], ge=view.by==='suc'?gerOf(k):''; h+='<tr>'+rowH(esc(k)+(view.by==='as'?' <span class="sub">'+esc(s.suc)+'</span>':'')+(ge?'<div class="sub">'+esc(ge)+'</div>':''),k,s,view.by==='suc'?'<td class="p">'+dl('cp',k,s.cp)+(s.cv?' <span class="warn" title="Compromisos vencidos">⏰'+s.cv+'</span>':'')+'</td><td class="p">'+pf(pct(s.ren+s.cp,s.base))+'</td>':'')+'</tr>'; });
+  h+='<tr>'+rowH('<b>Región</b>','',T,view.by==='suc'?'<td class="p">'+dl('cp','',T.cp)+(T.cv?' <span class="warn">⏰'+T.cv+'</span>':'')+'</td><td class="p">'+pf(pct(T.ren+T.cp,T.base))+'</td>':'')+'</tr></table><div class="sub" style="margin-top:6px">Las 3 grandes: <b>Venc.</b> · <b>Reno.</b> (todo el que ya tiene crédito nuevo, incluye adelantados y regresados) · <b>Por Renovar</b> (= Venc. − Reno. − N.Ren). Después de la línea: Adel. (dentro de Reno.) · Liq S/R (liquidó sin renovar, dentro de Por Renovar) · N.Ren (no renueva, marcado por ti). # Comp. = clientes que te dijeron que sí renuevan ("Renueva en tiempo" / "Sí renueva") y aún no renuevan; se suma solo al marcarlos. % Comp. = (Reno. + # Comp.) / Venc. ⏰ = compromisos con fecha ya vencida.</div></div>';
   { const cur=today().slice(0,7), ms=months.filter(m=>m<=cur).slice(-8).reverse(), sk=Object.keys(A.sucs).sort();
     h+='<div class="card" style="overflow:auto"><b>Meses anteriores — % de renovación por oficina</b><div class="sub">Con el estatus de hoy de cada vencimiento (clic en el mes para verlo completo).</div><table><tr><th>Mes</th>'+sk.map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ms.map(m=>{ const x=analyze(m); return '<tr><td><a href="#" data-gm="'+m+'">'+mname(m)+'</a></td>'+sk.map(k=>{const s=x.sucs[k];return '<td>'+(s?pf(pct(s.ren,s.base)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(x.tot.ren,x.tot.base))+'</td></tr>'; }).join('')+'</table></div>'; }
   const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const wk=d=>{ const x=new Date(d+'T12:00:00Z'); const dow=(x.getUTCDay()+6)%7; x.setUTCDate(x.getUTCDate()-dow); return x.toISOString().slice(0,10); }, byW={}; Object.keys(ck).sort().forEach(d=>{ byW[wk(d)]=d; }); const ds=Object.values(byW).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de cada carga; aquí se muestra el último corte de cada semana (lunes a sábado), así no se llena aunque cargues a diario.</div></div>'; }
   const cnt=k=>A.items.filter(i=>hit(i,k)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length;
-  h+='<div class="bar">'+[['por','Por renovar'],['lnr','Liquidó sin renovar'],['no','No renueva'],['pt','Pendientes (total)'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
+  h+='<div class="bar">'+[['por','Por renovar'],['cp','Comprometidos'],['cv','⏰ Compromiso vencido'],['lnr','Liquidó sin renovar'],['no','No renueva'],['pt','Pendientes (total)'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
   h+='<div class="bar"><select class="in" data-a="suc"><option value="">Todas las oficinas</option>'+Object.keys(A.sucs).sort().map(k=>'<option'+(view.suc===k?' selected':'')+'>'+esc(k)+'</option>').join('')+'</select><input class="in" style="flex:1;min-width:150px" placeholder="🔎 Buscar cliente o ID" value="'+esc(view.q)+'" data-a="q"></div>';
   const q=norm(view.q); let L=A.items.filter(i=>hit(i,view.filter)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
-  L.sort((a,b)=>(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
+  L.sort((a,b)=>((view.filter==='cp'||view.filter==='cv')?(a.fc||'9').localeCompare(b.fc||'9'):0)||(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
   h+='<div id="rnvList" class="bar"><span class="sub"><b>'+L.length+'</b> cliente(s)'+(view.as?' · asesor: <b>'+esc(view.as)+'</b> <a href="#" data-clras="1">quitar ✕</a>':'')+'</span><span style="flex:1"></span><button class="b" data-a="copylist">📋 Copiar lista (WhatsApp)</button></div>';
   L.slice(0,150).forEach(i=>{ const m=marks[i.id]||{}, op=view.open===i.id, dias=dd(today(),i.fin);
-    h+='<div class="row '+i.est+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.renew?' <span class="sub">renovó <b>'+fdate(i.nx.ini)+'</b> (ciclo '+(i.nx.ci||'?')+', '+esc((i.nx.as||'').split(' ').slice(0,2).join(' '))+')'+(i.liq?' · liquidó <b>'+fdate(i.liq)+'</b> · '+(dd(i.liq,i.nx.ini)<=0?'mismo día':dd(i.liq,i.nx.ini)+' d después'):'')+'</span>':(i.est==='lnr'&&i.liq?' <span class="sub"><b>liquidó '+fdate(i.liq)+'</b> (hace '+dd(i.liq,today())+' d)</span>':''))+(m.mot?' <span class="sub">· '+esc(m.mot)+'</span>':'')+'</div>';
+    h+='<div class="row '+i.est+(i.cvenc?' cv':'')+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.renew?' <span class="sub">renovó <b>'+fdate(i.nx.ini)+'</b> (ciclo '+(i.nx.ci||'?')+', '+esc((i.nx.as||'').split(' ').slice(0,2).join(' '))+')'+(i.liq?' · liquidó <b>'+fdate(i.liq)+'</b> · '+(dd(i.liq,i.nx.ini)<=0?'mismo día':dd(i.liq,i.nx.ini)+' d después'):'')+'</span>':(i.est==='lnr'&&i.liq?' <span class="sub"><b>liquidó '+fdate(i.liq)+'</b> (hace '+dd(i.liq,today())+' d)</span>':''))+gestHTML(i,m)+'</div>'+noteHTML(m);
     if(op){ h+='<div class="det" data-stop="1"><div>📞 <b>'+esc(i.tel||'sin teléfono')+'</b></div><div>🏪 '+esc(i.neg||'—')+'</div><div>🏠 '+esc(i.dom||'—')+'</div><div class="sub">Historial: '+i.hist.map(x=>'c'+(x.ci||'?')+' '+fdate(x.ini)+'→'+fdate(x.fin)+' '+esc(x.st)).join(' · ')+'</div>';
-      if(i.est!=='ren'){ h+='<div class="bar"><select class="in" data-mot="'+i.id+'"><option value="">Motivo…</option>'+MOTIVOS.map(x=>'<option'+(m.mot===x?' selected':'')+'>'+x+'</option>').join('')+'</select><button class="b'+(m.no?' on':'')+'" data-no="'+i.id+'">'+(m.no?'✓ No renueva (quitar)':'Marcar: no renueva')+'</button></div>'; }
+      if(!i.renew){ const sel=i.g==='no'?'no|'+(m.mot||''):(i.g||''); h+='<div class="bar"><select class="in" data-g="'+i.id+'"><option value="">Gestión…</option><optgroup label="✅ Va a renovar">'+Object.keys(GL).filter(x=>x!=='no').map(x=>'<option value="'+x+'"'+(sel===x?' selected':'')+'>'+GL[x]+'</option>').join('')+'</optgroup><optgroup label="❌ No renueva — motivo">'+MOTIVOS.map(x=>'<option value="no|'+x+'"'+(sel==='no|'+x?' selected':'')+'>'+x+'</option>').join('')+'</optgroup></select><label class="sub">📅 fecha compromiso <input class="in" type="date" value="'+esc(m.fc||'')+'" data-fc="'+i.id+'"></label></div>'; }
       (m.com||[]).slice().reverse().forEach(c=>{ h+='<div class="cm"><span class="sub">'+fdate(c.d)+'</span> '+esc(c.x)+'</div>'; });
       h+='<div class="bar"><input class="in" style="flex:1" placeholder="Agregar comentario…" data-cm="'+i.id+'"><button class="b" data-cmb="'+i.id+'">Guardar</button></div></div>'; }
     h+='</div>'; });
@@ -534,12 +536,17 @@ function copyList(){
   const tit={por:'Por renovar',pt:'Pendientes',lnr:'Liquidó sin renovar',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
   let out='*'+tit+' — '+mname(view.month)+'* ('+L.length+')\n'; let cs=null;
   L.forEach((i,n)=>{ if(i.suc!==cs){ cs=i.suc; out+='\n*'+cs+'*\n'; } const m=marks[i.id]||{};
-    out+=(n+1)+'. '+i.cl+' — '+money(i.mo)+' · '+i.as.split(' ').slice(0,2).join(' ')+' · vence '+fdate(i.fin)+(i.liq?' · liquidó '+fdate(i.liq):'')+(i.renew?' · renovó '+fdate(i.nx.ini):'')+(i.at>0?' · '+i.at+'d atraso':'')+(m.mot?' · '+m.mot:'')+'\n'; });
+    out+=(n+1)+'. '+i.cl+' — '+money(i.mo)+' · '+i.as.split(' ').slice(0,2).join(' ')+' · vence '+fdate(i.fin)+(i.liq?' · liquidó '+fdate(i.liq):'')+(i.renew?' · renovó '+fdate(i.nx.ini):'')+(i.g&&!i.renew?' · '+GL[i.g]+(i.g==='no'&&marks[i.id]&&marks[i.id].mot?' ('+marks[i.id].mot+')':'')+(i.fc&&i.g!=='no'?' · compromiso '+fdate(i.fc)+(i.cvenc?' VENCIDO':''):''):'')+(i.at>0?' · '+i.at+'d atraso':'')+(m.mot?' · '+m.mot:'')+'\n'; });
   out+='\nPor favor denme el estatus de estos clientes.';
   const ok=()=>{ view.msg='Lista copiada — lista para WhatsApp.'; draw(); };
   const fb=()=>{ const ta=document.createElement('textarea'); ta.value=out; ta.style.cssText='position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); let r=false; try{r=document.execCommand('copy');}catch(_){} ta.remove(); if(r) ok(); else { view.msg='No se pudo copiar.'; draw(); } };
   if(navigator.clipboard&&window.isSecureContext) navigator.clipboard.writeText(out).then(ok,fb); else fb();
 }
+const GL={tiempo:'Renueva en tiempo',si:'Sí renueva',espera:'Se quiere esperar',prox:'Renueva el próximo mes',no:'No renueva'};
+function gestHTML(i,m){ if(i.renew||!i.g) return ''; let h=' <span class="gc g-'+i.g+'">'+(i.g==='no'?'❌ ':'✅ ')+GL[i.g]+(i.g==='no'&&m.mot?': '+esc(m.mot):'')+'</span>';
+  if(i.fc&&i.g!=='no'){ const dv=dd(i.fc,today()); h+=' <span class="gc g-fc">📅 '+fdate(i.fc)+'</span>'+(i.cvenc?' <span class="warn">⏰ vencido hace '+dv+' d — volver a preguntar</span>':(i.fc===today()?' <b>(hoy)</b>':'')); }
+  return h; }
+function noteHTML(m){ const c=(m.com||[])[(m.com||[]).length-1]; return c?'<div class="lastnote"><b>💬 '+esc(c.x)+'</b> <span class="sub">('+fdate(c.d)+')</span></div>':''; }
 function save(){ jset('marks',marks); jset('comp',comp); jset('cfg',cfg); }
 document.addEventListener('click',e=>{
   const t=e.target; if(t.closest('#rnvOpen')){ $('#rnvPanel').classList.add('on'); draw(); return; }
@@ -565,7 +572,8 @@ document.addEventListener('change',e=>{ const t=e.target; if(!t.closest('#rnvPan
   else if(t.dataset.a==='suc'){ view.suc=t.value; view.as=''; draw(); }
   else if(t.dataset.a==='adv'){ cfg.adv=Math.max(0,+t.value||0); save(); draw(); }
   else if(t.dataset.comp!=null){ const c=comp[view.month]=comp[view.month]||{}; if(t.value==='') delete c[t.dataset.comp]; else { const sx=analyze(view.month).sucs[t.dataset.comp]; c[t.dataset.comp]=Math.max(0,Math.min(+t.value||0,sx?sx.por:+t.value)); } save(); draw(); }
-  else if(t.dataset.mot!=null){ const m=marks[t.dataset.mot]=marks[t.dataset.mot]||{}; m.mot=t.value; save(); draw(); } });
+  else if(t.dataset.g!=null){ const m=marks[t.dataset.g]=marks[t.dataset.g]||{}, v=t.value; if(v===''){ delete m.g; delete m.mot; m.no=false; } else if(v.indexOf('no|')===0){ m.g='no'; m.no=true; m.mot=v.slice(3); } else { m.g=v; m.no=false; delete m.mot; } save(); draw(); }
+  else if(t.dataset.fc!=null){ const m=marks[t.dataset.fc]=marks[t.dataset.fc]||{}; if(t.value) m.fc=t.value; else delete m.fc; save(); draw(); } });
 document.addEventListener('input',e=>{ const t=e.target; if(t.dataset&&t.dataset.a==='q'&&t.closest('#rnvPanel')){ view.q=t.value; const p=t.selectionStart; draw(); const n=document.querySelector('[data-a="q"]'); if(n){n.focus(); try{n.setSelectionRange(p,p);}catch(_){}} } });
 $('#rnvFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(f) onFile(f); });
 idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().slice(0,7); view.month=m.includes(mes)?mes:(m[m.length-1]||mes); } }).catch(()=>{});
@@ -649,7 +657,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.15.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.16.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2703,7 +2711,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.15.0';
+  const APP_VERSION = 'v2.16.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
