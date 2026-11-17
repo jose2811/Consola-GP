@@ -75,6 +75,11 @@
   .btn-wa:active{opacity:.85;}
   .btn-refresh{display:block;width:100%;background:var(--m1);color:#fff;border:none;border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:10px;}
   .btn-refresh:active{opacity:.85;}
+  .actrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 12px;}
+  .actrow .btn-wa,.actrow button{margin:0;}
+  .dirrow{grid-template-columns:repeat(3,1fr);}
+  .dirrow .btn-wa{padding:11px 6px;font-size:13px;}
+  .dir-cap{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:2px 2px 5px;}
   .btn-refresh:disabled{opacity:.6;cursor:default;}
   .buzon-status{font-size:12.5px;line-height:1.5;padding:9px 12px;border-radius:10px;margin:-2px 0 12px;background:var(--neutral-soft);color:var(--muted);}
   .buzon-status.loading{background:var(--m1-soft);color:var(--m1);}
@@ -347,7 +352,7 @@
   <div class="buzon-status" id="buzonStatus">Aún no se ha actualizado desde el buzón.</div>
 <!-- ===== Renovaciones (v2.11.0) — todo local: la cartera vive en IndexedDB de este navegador, nunca sale ===== -->
 <style>
-#rnvOpen{width:100%;margin:8px 0;padding:12px;border:0;border-radius:12px;background:#1F6F5C;color:#fff;font-weight:700;font-size:14px;cursor:pointer}
+#rnvOpen{width:100%;padding:12px;border:0;border-radius:10px;background:#B4571F;color:#fff;font-weight:700;font-size:14px;cursor:pointer}
 #rnvPanel{display:none;position:fixed;inset:0;z-index:9000;background:var(--bg,#f4f5f2);overflow:auto;-webkit-overflow-scrolling:touch}
 #rnvPanel.on{display:block}
 .rnv{max-width:980px;margin:0 auto;padding:14px 14px 60px;font-size:13px;color:var(--ink,#1c2430)}
@@ -375,7 +380,7 @@
 .rnv .cm{background:#f6f7f9;border-radius:8px;padding:5px 8px;margin:4px 0;font-size:12px}
 .rnv .cp{width:62px;text-align:right}
 </style>
-<button id="rnvOpen">🔁 Renovaciones del mes (cartera)</button>
+<div class="actrow"><button id="rnvOpen">🔁 Renovaciones</button></div>
 <div id="rnvPanel"><div class="rnv" id="rnvRoot"></div></div>
 <input type="file" id="rnvFile" accept=".xlsx,.xls,.csv" style="display:none">
 <script>
@@ -545,9 +550,12 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 </script>
 
 
-  <button class="btn-wa" id="btnCopyDaySummary" style="display:none;">📋 Compromiso del día — dirección (WhatsApp)</button>
-  <button class="btn-wa" id="btnCopyCorte" style="display:none;margin-top:8px;">🕑 Corte / cierre — dirección (WhatsApp)</button>
-  <button class="btn-wa" id="btnCopyTeamSummary" style="display:none;margin-top:8px;background:var(--m1,#2b6cb0);">📣 Copiar resumen para gerentes (WhatsApp)</button>
+  <div class="dir-cap" style="display:none;">📣 Para dirección (WhatsApp)</div>
+  <div class="actrow dirrow" id="dirRow" style="display:none;">
+    <button class="btn-wa" id="btnCopyDaySummary">📋 Compromiso</button>
+    <button class="btn-wa" id="btnCopyCorte">🕑 Corte</button>
+    <button class="btn-wa" id="btnCopyCierre">🏁 Cierre</button>
+  </div>
 
   <div class="status-row">
     <span id="statusText"><b>0</b> sucursales cargadas</span>
@@ -616,7 +624,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.12.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.12.1 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1391,7 +1399,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     const MOSTRAR_PCT_FICHAS = false;   // poner true para volver a mostrar (%) en Pdd y Approvals
     const pct1 = (r,t,dec)=> (MOSTRAR_PCT_FICHAS && t) ? ` (${dec ? (Math.round(((r||0)/t)*1000)/10).toString() : Math.round(((r||0)/t)*100)}%)` : '';
     const x = (n,m)=> `${n||0} x ${m}`;
-    let out = modo==='corte' ? `*Corte*\n` : `*Compromiso*\n`;
+    let out = modo==='corte' ? `*Corte*\n` : (modo==='cierre' ? `*Cierre*\n` : `*Compromiso*\n`);
     out += `Pdd ${A.fi.r}/${A.fi.t}${pct1(A.fi.r,A.fi.t,false)}\n`;
     out += `Approvals ${A.ap.r}/${A.ap.t}${pct1(A.ap.r,A.ap.t,true)}\n`;
     out += `Desembolsos ${x(A.dN, fmtMoney(A.dC))}\n`;
@@ -1450,7 +1458,6 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     document.body.removeChild(ta); return ok;
   }
   const btnCopyDaySummary = $('#btnCopyDaySummary');
-  const btnCopyTeamSummary = $('#btnCopyTeamSummary');
   const btnCopyCorte = $('#btnCopyCorte');
   if(btnCopyCorte){
     btnCopyCorte.addEventListener('click', async ()=>{
@@ -1464,15 +1471,16 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       }
     });
   }
-  if(btnCopyTeamSummary){
-    btnCopyTeamSummary.addEventListener('click', async ()=>{
-      const text = buildTeamSummaryText();
+  const btnCopyCierre = $('#btnCopyCierre');
+  if(btnCopyCierre){
+    btnCopyCierre.addEventListener('click', async ()=>{
+      const text = buildDireccionText('cierre');
       try{
-        if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); toast('Resumen para gerentes copiado — listo para WhatsApp'); return; }
+        if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); toast('Cierre copiado — listo para WhatsApp'); return; }
         throw new Error('clipboard API no disponible');
       }catch(e){
         const ok = copyDaySummaryFallback(text);
-        toast(ok?'Resumen para gerentes copiado — listo para WhatsApp':'No se pudo copiar — selecciona el texto manualmente');
+        toast(ok?'Cierre copiado — listo para WhatsApp':'No se pudo copiar — selecciona el texto manualmente');
       }
     });
   }
@@ -2626,7 +2634,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     // (se reacomodaron en la pantalla), así que controlan su propio show/hide
     // con la misma condición de siempre: solo si ya hay algo cargado.
     $('#totalGeneral').style.display = n ? '' : 'none';
-    $('#btnCopyDaySummary').style.display = n ? '' : 'none'; $('#btnCopyTeamSummary').style.display = n ? '' : 'none'; $('#btnCopyCorte').style.display = n ? '' : 'none';
+    $('#dirRow').style.display = n ? '' : 'none'; document.querySelector('.dir-cap').style.display = n ? '' : 'none';
     if(n){
       renderTotalGeneral();
       renderLastUpdated();
@@ -2665,7 +2673,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.12.0';
+  const APP_VERSION = 'v2.12.1';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
