@@ -372,9 +372,9 @@
 .rnv td{padding:6px;text-align:right;border-bottom:1px solid #f0f2f4}.rnv th:first-child,.rnv td:first-child{text-align:left}
 .rnv td.p{font-weight:800}
 .rnv .bd{display:inline-block;font-size:10.5px;font-weight:800;border-radius:99px;padding:2px 8px;color:#fff}
-.rnv .bd.ren{background:#1F6F5C}.rnv .bd.pend{background:#b7791f}.rnv .bd.no{background:#c0392b}.rnv .bd.lnr{background:#6b4fa0}
+.rnv .bd.ren{background:#1F6F5C}.rnv .bd.pend{background:#b7791f}.rnv .bd.no{background:#c0392b}.rnv .bd.lnr{background:#6b4fa0}.rnv .bd.rec{background:#5b7c99}
 .rnv .row{background:#fff;border:1px solid #e1e5ea;border-left:4px solid #b7791f;border-radius:10px;padding:9px 11px;margin:7px 0;cursor:pointer}
-.rnv .row.ren{border-left-color:#1F6F5C}.rnv .row.no{border-left-color:#c0392b}.rnv .row.lnr{border-left-color:#6b4fa0}
+.rnv .row.ren{border-left-color:#1F6F5C}.rnv .row.no{border-left-color:#c0392b}.rnv .row.lnr{border-left-color:#6b4fa0}.rnv .row.rec{border-left-color:#5b7c99}
 .rnv .row .t{display:flex;justify-content:space-between;gap:8px;font-weight:700}
 .rnv .det{margin-top:8px;border-top:1px dashed #d9dde2;padding-top:8px;cursor:default}
 .rnv .det div{margin:3px 0}.rnv .warn{color:#c0392b;font-weight:700}
@@ -477,16 +477,16 @@ function analyze(month){
       if(liq&&liq<ms){ if(dd(liq,nx.ini)<=cfg.tol){ren=true; adel=nx.ini<ms;} else back=true; } // liquidó antes del mes: solo cuenta si fue renovación inmediata (adelanto)
       else if(nx.ini<=me){ren=true; adel=nx.ini<ms;} else back=true; } // dentro del mes: cualquier día cuenta
     const m=marks[r.id]||{};
-    items.push({...r,ren,adel,back,nx,liq,hist:l,est:ren?'ren':(m.no?'no':(pagado?'lnr':'pend'))}); });
-  const sucs={}; items.forEach(i=>{ const s=sucs[i.suc]=sucs[i.suc]||{base:0,ren:0,adel:0,no:0,lnr:0,pend:0,monto:0}; s.base++; s.monto+=i.mo; s[i.est]++; if(i.adel) s.adel++; });
-  const tot={base:0,ren:0,adel:0,no:0,lnr:0,pend:0,monto:0}; Object.values(sucs).forEach(s=>Object.keys(tot).forEach(k=>tot[k]+=s[k]));
+    items.push({...r,ren,adel,back,nx,liq,hist:l,est:ren?'ren':(m.no?'no':(pagado?(nx?'rec':'lnr'):'pend'))}); });
+  const sucs={}; items.forEach(i=>{ const s=sucs[i.suc]=sucs[i.suc]||{base:0,ren:0,adel:0,no:0,lnr:0,rec:0,pend:0,monto:0}; s.base++; s.monto+=i.mo; s[i.est]++; if(i.adel) s.adel++; });
+  const tot={base:0,ren:0,adel:0,no:0,lnr:0,rec:0,pend:0,monto:0}; Object.values(sucs).forEach(s=>Object.keys(tot).forEach(k=>tot[k]+=s[k]));
   const snap={}; Object.entries(sucs).forEach(([k,s])=>snap[k]={b:s.base,r:s.ren,a:s.adel}); snap['*']={b:tot.base,r:tot.ren,a:tot.adel};
   return {items,sucs,tot,snap};
 }
 
 /* ---------- pantalla ---------- */
 const mname=m=>{const n=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return n[+m.slice(5)-1]+' '+m.slice(0,4);};
-const EST={ren:'Renovó',pend:'Pendiente',no:'No renueva',lnr:'Liquidó sin renovar'};
+const EST={ren:'Renovó',pend:'Pendiente',no:'No renueva',lnr:'Liquidó sin renovar',rec:'Regresó con crédito nuevo'};
 function draw(){
   const R=$('#rnvRoot'); if(!R) return; let h='<div class="bar"><h2>🔁 Renovaciones</h2><span style="flex:1"></span><button class="b" data-a="close">Cerrar ✕</button></div>';
   h+='<div class="sub">Todo se queda en este navegador (no se manda ni se respalda en ningún lado). Sube el Excel de cartera; al subir uno nuevo se actualiza solo el avance y se conservan tus motivos y comentarios.</div>';
@@ -498,22 +498,22 @@ function draw(){
   h+='<div class="bar"><label>Vencimientos de <select class="in" data-a="month">'+months.map(m=>'<option value="'+m+'"'+(m===view.month?' selected':'')+'>'+mname(m)+'</option>').join('')+'</select></label><label class="sub">tolerancia adelantos: <input class="in" style="width:48px" type="number" min="0" max="60" value="'+cfg.tol+'" data-a="tol"> días tras liquidar (solo si liquidó antes del mes)</label></div>';
   const pm=pct(T.ren,T.base), pa=pct(T.ren-T.adel,T.base-T.adel), cR=Object.values(comp[view.month]||{}).reduce((a,b)=>a+(+b||0),0);
   h+='<div class="card"><div class="big"><div><div class="n">'+pf(pm)+'</div><div class="l">Renovación del mes<br>('+T.ren+' de '+T.base+' vencimientos)</div></div><div><div class="n" style="font-size:26px">'+pf(pa)+'</div><div class="l">Avance sobre pendiente<br>('+(T.ren-T.adel)+' de '+(T.base-T.adel)+' · sin los '+T.adel+' adelantados)</div></div><div class="l">Monto vencimientos: <b>'+money(T.monto)+'</b>'+(cR?'<br>Compromiso región: <b>'+cR+'</b> renovaciones · real '+T.ren:'')+'</div></div></div>';
-  const G={}; A.items.forEach(i=>{ const k=view.by==='as'?(i.as||'(sin asesor)'):i.suc; const g=G[k]=G[k]||{base:0,ren:0,adel:0,no:0,lnr:0,pend:0,suc:i.suc}; g.base++; g[i.est]++; if(i.adel) g.adel++; });
+  const G={}; A.items.forEach(i=>{ const k=view.by==='as'?(i.as||'(sin asesor)'):i.suc; const g=G[k]=G[k]||{base:0,ren:0,adel:0,no:0,lnr:0,rec:0,pend:0,suc:i.suc}; g.base++; g[i.est]++; if(i.adel) g.adel++; });
   h+='<div class="bar"><button class="b'+(view.by==='suc'?' on':'')+'" data-by="suc">Por oficina / gerente</button><button class="b'+(view.by==='as'?' on':'')+'" data-by="as">Por asesor</button></div>';
-  h+='<div class="card" style="overflow:auto"><table><tr><th>'+(view.by==='as'?'Asesor':'Oficina / gerente')+'</th><th>Venc.</th><th>Renov.</th><th>Adel.</th><th>Pend.</th><th>Liq. s/renov</th><th>No renueva</th><th>% mes</th><th>% avance</th>'+(view.by==='suc'?'<th>Compromiso</th>':'')+'</tr>';
-  Object.keys(G).sort().forEach(k=>{ const s=G[k], c=(comp[view.month]||{})[k], ge=view.by==='suc'?gerOf(k):''; h+='<tr><td>'+esc(k)+(view.by==='as'?' <span class="sub">'+esc(s.suc)+'</span>':'')+(ge?'<div class="sub">'+esc(ge)+'</div>':'')+'</td><td>'+dl('todos',k,s.base)+'</td><td>'+dl('ren',k,s.ren)+'</td><td>'+dl('adel',k,s.adel)+'</td><td>'+dl('pend',k,s.pend)+'</td><td>'+dl('lnr',k,s.lnr)+'</td><td>'+dl('no',k,s.no)+'</td><td class="p">'+pf(pct(s.ren,s.base))+'</td><td class="p">'+pf(pct(s.ren-s.adel,s.base-s.adel))+'</td>'+(view.by==='suc'?'<td><input class="in cp" type="number" min="0" value="'+(c==null?'':c)+'" data-comp="'+esc(k)+'">'+(c?' <span class="sub">'+s.ren+'/'+c+'</span>':'')+'</td>':'')+'</tr>'; });
-  h+='<tr><td><b>Región</b></td><td>'+dl('todos','',T.base)+'</td><td>'+dl('ren','',T.ren)+'</td><td>'+dl('adel','',T.adel)+'</td><td>'+dl('pend','',T.pend)+'</td><td>'+dl('lnr','',T.lnr)+'</td><td>'+dl('no','',T.no)+'</td><td class="p">'+pf(pm)+'</td><td class="p">'+pf(pa)+'</td>'+(view.by==='suc'?'<td></td>':'')+'</tr></table></div>';
+  h+='<div class="card" style="overflow:auto"><table><tr><th>'+(view.by==='as'?'Asesor':'Oficina / gerente')+'</th><th>Venc.</th><th>Renov.</th><th>Adel.</th><th>Pend.</th><th>Liq. s/renov</th><th>Regresó</th><th>No renueva</th><th>% mes</th><th>% avance</th>'+(view.by==='suc'?'<th>Compromiso</th>':'')+'</tr>';
+  Object.keys(G).sort().forEach(k=>{ const s=G[k], c=(comp[view.month]||{})[k], ge=view.by==='suc'?gerOf(k):''; h+='<tr><td>'+esc(k)+(view.by==='as'?' <span class="sub">'+esc(s.suc)+'</span>':'')+(ge?'<div class="sub">'+esc(ge)+'</div>':'')+'</td><td>'+dl('todos',k,s.base)+'</td><td>'+dl('ren',k,s.ren)+'</td><td>'+dl('adel',k,s.adel)+'</td><td>'+dl('pend',k,s.pend)+'</td><td>'+dl('lnr',k,s.lnr)+'</td><td>'+dl('rec',k,s.rec)+'</td><td>'+dl('no',k,s.no)+'</td><td class="p">'+pf(pct(s.ren,s.base))+'</td><td class="p">'+pf(pct(s.ren-s.adel,s.base-s.adel))+'</td>'+(view.by==='suc'?'<td><input class="in cp" type="number" min="0" value="'+(c==null?'':c)+'" data-comp="'+esc(k)+'">'+(c?' <span class="sub">'+s.ren+'/'+c+'</span>':'')+'</td>':'')+'</tr>'; });
+  h+='<tr><td><b>Región</b></td><td>'+dl('todos','',T.base)+'</td><td>'+dl('ren','',T.ren)+'</td><td>'+dl('adel','',T.adel)+'</td><td>'+dl('pend','',T.pend)+'</td><td>'+dl('lnr','',T.lnr)+'</td><td>'+dl('rec','',T.rec)+'</td><td>'+dl('no','',T.no)+'</td><td class="p">'+pf(pm)+'</td><td class="p">'+pf(pa)+'</td>'+(view.by==='suc'?'<td></td>':'')+'</tr></table></div>';
   { const cur=today().slice(0,7), ms=months.filter(m=>m<=cur).slice(-8).reverse(), sk=Object.keys(A.sucs).sort();
     h+='<div class="card" style="overflow:auto"><b>Meses anteriores — % de renovación por oficina</b><div class="sub">Con el estatus de hoy de cada vencimiento (clic en el mes para verlo completo).</div><table><tr><th>Mes</th>'+sk.map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ms.map(m=>{ const x=analyze(m); return '<tr><td><a href="#" data-gm="'+m+'">'+mname(m)+'</a></td>'+sk.map(k=>{const s=x.sucs[k];return '<td>'+(s?pf(pct(s.ren,s.base)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(x.tot.ren,x.tot.base))+'</td></tr>'; }).join('')+'</table></div>'; }
   const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const ds=Object.keys(ck).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de renovación en cada carga de este mes para ver cómo avanza semana a semana.</div></div>'; }
   const hit=(i,k)=>k==='todos'||(k==='adel'?i.adel:i.est===k), cnt=k=>A.items.filter(i=>hit(i,k)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length;
-  h+='<div class="bar">'+[['pend','Pendientes'],['lnr','Liquidó sin renovar'],['no','No renueva'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
+  h+='<div class="bar">'+[['pend','Pendientes'],['lnr','Liquidó sin renovar'],['rec','Regresó'],['no','No renueva'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
   h+='<div class="bar"><select class="in" data-a="suc"><option value="">Todas las oficinas</option>'+Object.keys(A.sucs).sort().map(k=>'<option'+(view.suc===k?' selected':'')+'>'+esc(k)+'</option>').join('')+'</select><input class="in" style="flex:1;min-width:150px" placeholder="🔎 Buscar cliente o ID" value="'+esc(view.q)+'" data-a="q"></div>';
   const q=norm(view.q); let L=A.items.filter(i=>hit(i,view.filter)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
   L.sort((a,b)=>(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
   h+='<div id="rnvList" class="bar"><span class="sub"><b>'+L.length+'</b> cliente(s)'+(view.as?' · asesor: <b>'+esc(view.as)+'</b> <a href="#" data-clras="1">quitar ✕</a>':'')+'</span><span style="flex:1"></span><button class="b" data-a="copylist">📋 Copiar lista (WhatsApp)</button></div>';
   L.slice(0,150).forEach(i=>{ const m=marks[i.id]||{}, op=view.open===i.id, dias=dd(today(),i.fin);
-    h+='<div class="row '+i.est+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.adel?' <span class="sub">adelantado '+fdate(i.nx.ini)+'</span>':'')+(i.back?' <span class="sub">regresó '+fdate(i.nx.ini)+' (ya fuera del mes / liquidó antes)</span>':'')+(i.est==='lnr'&&i.liq?' <span class="sub">liquidó '+fdate(i.liq)+'</span>':'')+(m.mot?' <span class="sub">· '+esc(m.mot)+'</span>':'')+'</div>';
+    h+='<div class="row '+i.est+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.adel?' <span class="sub">adelantado '+fdate(i.nx.ini)+'</span>':'')+(i.back&&i.nx?' <span class="sub">regresó '+fdate(i.nx.ini)+' con crédito nuevo (ciclo '+(i.nx.ci||'?')+', '+esc((i.nx.as||'').split(' ').slice(0,2).join(' '))+')</span>':'')+(i.est==='lnr'&&i.liq?' <span class="sub">liquidó '+fdate(i.liq)+'</span>':'')+(m.mot?' <span class="sub">· '+esc(m.mot)+'</span>':'')+'</div>';
     if(op){ h+='<div class="det" data-stop="1"><div>📞 <b>'+esc(i.tel||'sin teléfono')+'</b></div><div>🏪 '+esc(i.neg||'—')+'</div><div>🏠 '+esc(i.dom||'—')+'</div><div class="sub">Historial: '+i.hist.map(x=>'c'+(x.ci||'?')+' '+fdate(x.ini)+'→'+fdate(x.fin)+' '+esc(x.st)).join(' · ')+'</div>';
       if(i.est!=='ren'){ h+='<div class="bar"><select class="in" data-mot="'+i.id+'"><option value="">Motivo…</option>'+MOTIVOS.map(x=>'<option'+(m.mot===x?' selected':'')+'>'+x+'</option>').join('')+'</select><button class="b'+(m.no?' on':'')+'" data-no="'+i.id+'">'+(m.no?'✓ No renueva (quitar)':'Marcar: no renueva')+'</button></div>'; }
       (m.com||[]).slice().reverse().forEach(c=>{ h+='<div class="cm"><span class="sub">'+fdate(c.d)+'</span> '+esc(c.x)+'</div>'; });
@@ -526,7 +526,7 @@ function copyList(){
   const A=analyze(view.month), q=norm(view.q), hit=(i,k)=>k==='todos'||(k==='adel'?i.adel:i.est===k);
   const L=A.items.filter(i=>hit(i,view.filter)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q))).sort((a,b)=>a.suc.localeCompare(b.suc)||a.as.localeCompare(b.as)||(a.fin||'').localeCompare(b.fin||''));
   if(!L.length){ view.msg='No hay clientes en esta lista.'; draw(); return; }
-  const tit={pend:'Pendientes de renovar',lnr:'Liquidó sin renovar',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
+  const tit={pend:'Pendientes de renovar',lnr:'Liquidó sin renovar',rec:'Regresó con crédito nuevo',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
   let out='*'+tit+' — '+mname(view.month)+'* ('+L.length+')\n'; let cs=null;
   L.forEach((i,n)=>{ if(i.suc!==cs){ cs=i.suc; out+='\n*'+cs+'*\n'; } const m=marks[i.id]||{};
     out+=(n+1)+'. '+i.cl+' — '+money(i.mo)+' · '+i.as.split(' ').slice(0,2).join(' ')+' · vence '+fdate(i.fin)+(i.est==='lnr'&&i.liq?' · liquidó '+fdate(i.liq):'')+(i.at>0?' · '+i.at+'d atraso':'')+(m.mot?' · '+m.mot:'')+'\n'; });
@@ -642,7 +642,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.13.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.13.1 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2691,7 +2691,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.13.0';
+  const APP_VERSION = 'v2.13.1';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
