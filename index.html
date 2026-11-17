@@ -514,7 +514,7 @@ function draw(){
   L.sort((a,b)=>(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
   h+='<div id="rnvList" class="bar"><span class="sub"><b>'+L.length+'</b> cliente(s)'+(view.as?' · asesor: <b>'+esc(view.as)+'</b> <a href="#" data-clras="1">quitar ✕</a>':'')+'</span><span style="flex:1"></span><button class="b" data-a="copylist">📋 Copiar lista (WhatsApp)</button></div>';
   L.slice(0,150).forEach(i=>{ const m=marks[i.id]||{}, op=view.open===i.id, dias=dd(today(),i.fin);
-    h+='<div class="row '+i.est+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.adel?' <span class="sub">adelantado '+fdate(i.nx.ini)+'</span>':'')+(i.back&&i.nx?' <span class="sub">regresó '+fdate(i.nx.ini)+' con crédito nuevo (ciclo '+(i.nx.ci||'?')+', '+esc((i.nx.as||'').split(' ').slice(0,2).join(' '))+')</span>':'')+(i.est==='lnr'&&i.liq?' <span class="sub">liquidó '+fdate(i.liq)+'</span>':'')+(m.mot?' <span class="sub">· '+esc(m.mot)+'</span>':'')+'</div>';
+    h+='<div class="row '+i.est+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.adel?' <span class="sub">adelantado '+fdate(i.nx.ini)+'</span>':'')+(i.back&&i.nx?' <span class="sub">regresó '+fdate(i.nx.ini)+' con crédito nuevo (ciclo '+(i.nx.ci||'?')+', '+esc((i.nx.as||'').split(' ').slice(0,2).join(' '))+')</span>':'')+((i.est==='lnr'||i.est==='rec')&&i.liq?' <span class="sub"><b>liquidó '+fdate(i.liq)+'</b> (hace '+dd(i.liq,today())+' d)</span>':'')+(m.mot?' <span class="sub">· '+esc(m.mot)+'</span>':'')+'</div>';
     if(op){ h+='<div class="det" data-stop="1"><div>📞 <b>'+esc(i.tel||'sin teléfono')+'</b></div><div>🏪 '+esc(i.neg||'—')+'</div><div>🏠 '+esc(i.dom||'—')+'</div><div class="sub">Historial: '+i.hist.map(x=>'c'+(x.ci||'?')+' '+fdate(x.ini)+'→'+fdate(x.fin)+' '+esc(x.st)).join(' · ')+'</div>';
       if(i.est!=='ren'){ h+='<div class="bar"><select class="in" data-mot="'+i.id+'"><option value="">Motivo…</option>'+MOTIVOS.map(x=>'<option'+(m.mot===x?' selected':'')+'>'+x+'</option>').join('')+'</select><button class="b'+(m.no?' on':'')+'" data-no="'+i.id+'">'+(m.no?'✓ No renueva (quitar)':'Marcar: no renueva')+'</button></div>'; }
       (m.com||[]).slice().reverse().forEach(c=>{ h+='<div class="cm"><span class="sub">'+fdate(c.d)+'</span> '+esc(c.x)+'</div>'; });
@@ -530,7 +530,7 @@ function copyList(){
   const tit={pend:'Pendientes de renovar',lnr:'Liquidó sin renovar',rec:'Regresó con crédito nuevo',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
   let out='*'+tit+' — '+mname(view.month)+'* ('+L.length+')\n'; let cs=null;
   L.forEach((i,n)=>{ if(i.suc!==cs){ cs=i.suc; out+='\n*'+cs+'*\n'; } const m=marks[i.id]||{};
-    out+=(n+1)+'. '+i.cl+' — '+money(i.mo)+' · '+i.as.split(' ').slice(0,2).join(' ')+' · vence '+fdate(i.fin)+(i.est==='lnr'&&i.liq?' · liquidó '+fdate(i.liq):'')+(i.at>0?' · '+i.at+'d atraso':'')+(m.mot?' · '+m.mot:'')+'\n'; });
+    out+=(n+1)+'. '+i.cl+' — '+money(i.mo)+' · '+i.as.split(' ').slice(0,2).join(' ')+' · vence '+fdate(i.fin)+((i.est==='lnr'||i.est==='rec')&&i.liq?' · liquidó '+fdate(i.liq):'')+(i.est==='rec'&&i.nx?' · regresó '+fdate(i.nx.ini):'')+(i.at>0?' · '+i.at+'d atraso':'')+(m.mot?' · '+m.mot:'')+'\n'; });
   out+='\nPor favor denme el estatus de estos clientes.';
   const ok=()=>{ view.msg='Lista copiada — lista para WhatsApp.'; draw(); };
   const fb=()=>{ const ta=document.createElement('textarea'); ta.value=out; ta.style.cssText='position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); let r=false; try{r=document.execCommand('copy');}catch(_){} ta.remove(); if(r) ok(); else { view.msg='No se pudo copiar.'; draw(); } };
@@ -643,7 +643,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.13.2 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.13.3 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2692,7 +2692,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.13.2';
+  const APP_VERSION = 'v2.13.3';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
