@@ -345,6 +345,196 @@
 
   <button class="btn-refresh" id="btnActualizarBuzon">🔄 Actualizar desde el buzón</button>
   <div class="buzon-status" id="buzonStatus">Aún no se ha actualizado desde el buzón.</div>
+<!-- ===== Renovaciones (v2.11.0) — todo local: la cartera vive en IndexedDB de este navegador, nunca sale ===== -->
+<style>
+#rnvOpen{width:100%;margin:8px 0;padding:12px;border:0;border-radius:12px;background:#1F6F5C;color:#fff;font-weight:700;font-size:14px;cursor:pointer}
+#rnvPanel{display:none;position:fixed;inset:0;z-index:9000;background:var(--bg,#f4f5f2);overflow:auto;-webkit-overflow-scrolling:touch}
+#rnvPanel.on{display:block}
+.rnv{max-width:980px;margin:0 auto;padding:14px 14px 60px;font-size:13px;color:var(--ink,#1c2430)}
+.rnv h2{margin:0;font-size:18px}.rnv .sub{color:var(--muted,#6b7480);font-size:11.5px}
+.rnv .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.rnv button,.rnv select,.rnv input{font:inherit}
+.rnv .b{border:1px solid #cfd5dc;background:#fff;border-radius:9px;padding:7px 11px;cursor:pointer;font-weight:600}
+.rnv .b.pri{background:#1F6F5C;border-color:#1F6F5C;color:#fff}
+.rnv .b.on{background:#1c2430;color:#fff;border-color:#1c2430}
+.rnv .in{border:1px solid #cfd5dc;border-radius:9px;padding:7px 9px;background:#fff}
+.rnv .card{background:#fff;border:1px solid #e1e5ea;border-radius:12px;padding:12px;margin:10px 0}
+.rnv .big{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end}
+.rnv .big .n{font-size:34px;font-weight:800;line-height:1}.rnv .big .l{font-size:11px;color:#6b7480}
+.rnv table{width:100%;border-collapse:collapse;font-size:12.5px}
+.rnv th{font-size:10.5px;text-transform:uppercase;color:#6b7480;text-align:right;padding:4px 6px;border-bottom:1px solid #e1e5ea}
+.rnv td{padding:6px;text-align:right;border-bottom:1px solid #f0f2f4}.rnv th:first-child,.rnv td:first-child{text-align:left}
+.rnv td.p{font-weight:800}
+.rnv .bd{display:inline-block;font-size:10.5px;font-weight:800;border-radius:99px;padding:2px 8px;color:#fff}
+.rnv .bd.ren{background:#1F6F5C}.rnv .bd.pend{background:#b7791f}.rnv .bd.no{background:#c0392b}.rnv .bd.lnr{background:#6b4fa0}
+.rnv .row{background:#fff;border:1px solid #e1e5ea;border-left:4px solid #b7791f;border-radius:10px;padding:9px 11px;margin:7px 0;cursor:pointer}
+.rnv .row.ren{border-left-color:#1F6F5C}.rnv .row.no{border-left-color:#c0392b}.rnv .row.lnr{border-left-color:#6b4fa0}
+.rnv .row .t{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.rnv .det{margin-top:8px;border-top:1px dashed #d9dde2;padding-top:8px;cursor:default}
+.rnv .det div{margin:3px 0}.rnv .warn{color:#c0392b;font-weight:700}
+.rnv .cm{background:#f6f7f9;border-radius:8px;padding:5px 8px;margin:4px 0;font-size:12px}
+.rnv .cp{width:62px;text-align:right}
+</style>
+<button id="rnvOpen">🔁 Renovaciones del mes (cartera)</button>
+<div id="rnvPanel"><div class="rnv" id="rnvRoot"></div></div>
+<input type="file" id="rnvFile" accept=".xlsx,.xls,.csv" style="display:none">
+<script>
+(function(){
+'use strict';
+const LS='director:renov:', $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const money=n=>'$'+Math.round(n||0).toLocaleString('es-MX');
+const pct=(a,b)=>b>0?Math.round(a*1000/b)/10:null, pf=v=>v==null?'—':v+'%';
+const jget=(k,d)=>{try{const v=localStorage.getItem(LS+k);return v?JSON.parse(v):d}catch(e){return d}};
+const jset=(k,v)=>{try{localStorage.setItem(LS+k,JSON.stringify(v))}catch(e){}};
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('consola-gp-cartera',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbGet(k){const db=await idb();return new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
+async function idbSet(k,v){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
+async function idbDel(k){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
+
+const MOTIVOS=['No quiso renovar','Mora / buró','Mal historial de pago','Negocio cerrado / sin actividad','No lo han visitado','No localizado','Se fue a otra financiera','Otro'];
+const FIELDS={ // campo: [etiqueta, alias normalizados, requerido]
+  id:['ID crédito',['saficreditoid','creditoid','idcredito','nocredito','credito'],1],
+  cid:['ID cliente',['safiClienteID','clienteid','idcliente','nocliente'],1],
+  cl:['Cliente',['cliente','nombrecliente','nombre'],1],
+  ci:['Ciclo',['ciclo'],0], mo:['Monto',['montodesembolso','monto'],0],
+  ini:['Fecha inicio',['fechainicio','fechadesembolso','inicio'],1],
+  fin:['Fecha fin',['fechafin','fechavencimiento','vencimiento'],1],
+  suc:['Sucursal',['sucursalgestion','sucursal','oficina'],1],
+  as:['Asesor',['asesorgestion','asesor'],0],
+  tel:['Teléfono',['telefono','tel','celular'],0],
+  st:['Estatus',['estatuscredito','estatus','estado'],1],
+  at:['Días atraso',['diasatraso','diasdeatraso','atraso'],0],
+  up:['Fecha último pago',['fechaultimopago','ultimopago'],0],
+  neg:['Dirección negocio',['negociodireccion','direccionnegocio','negocio'],0],
+  dom:['Domicilio',['domicilio','direcciondomicilio','direccion'],0]};
+FIELDS.cid[1]=FIELDS.cid[1].map(norm);
+function norm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');}
+function iso(v){ if(v==null||v==='') return null;
+  if(typeof v==='number'&&v>20000&&v<80000) return new Date(Math.round((v-25569)*864e5)).toISOString().slice(0,10);
+  const s=String(v); let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[1]+'-'+m[2]+'-'+m[3];
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'); return null; }
+const dd=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
+const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);};
+const sucName=s=>String(s||'').replace(/^CI-?/i,'').trim();
+const fdate=d=>d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(2,4):'—';
+
+let cart=null, marks=jget('marks',{}), comp=jget('comp',{}), cortes=jget('cortes',{}), cfg=jget('cfg',{tol:7});
+let view={month:today().slice(0,7),filter:'pend',suc:'',q:'',open:null,map:null,msg:''};
+
+/* ---------- carga ---------- */
+function loadLib(){return new Promise((res,rej)=>{ if(window.XLSX) return res(); const s=document.createElement('script'); s.src='xlsx.mini.min.js'; s.onload=()=>res(); s.onerror=()=>rej(new Error('No se pudo cargar el lector de Excel (necesita abrir la consola una vez con internet).')); document.head.appendChild(s); });}
+function readSheet(buf){ const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}); }
+function parseAOA(aoa,pending){
+  let hi=-1; for(let i=0;i<Math.min(15,aoa.length);i++){ const n=(aoa[i]||[]).map(norm); if(n.includes('cliente')&&n.filter(Boolean).length>=6){hi=i;break;} }
+  if(hi<0) return {err:'No encontré la fila de encabezados (busco una fila con "Cliente" y varias columnas).'};
+  const heads=(aoa[hi]||[]).map(h=>h==null?'':String(h)), nh=heads.map(norm), saved=jget('map',{}), colOf={}, missing=[];
+  Object.keys(FIELDS).forEach(f=>{
+    let i=-1; if(pending&&pending[f]!=null) i=+pending[f];
+    else if(saved[f]) i=nh.indexOf(saved[f]);
+    if(i<0) for(const a of FIELDS[f][1]){ i=nh.indexOf(norm(a)); if(i>=0) break; }
+    if(i>=0) colOf[f]=i; else if(FIELDS[f][2]) missing.push(f); });
+  if(missing.length) return {missing,heads,aoa};
+  const rows=[]; for(let r=hi+1;r<aoa.length;r++){ const x=aoa[r]; if(!x) continue;
+    const g=f=>colOf[f]==null?null:x[colOf[f]]; const id=String(g('id')==null?'':g('id')).trim(), cid=String(g('cid')==null?'':g('cid')).trim();
+    if(!/^\d+$/.test(id)||!/^\d+$/.test(cid)) continue; // ignora Total / leyendas
+    rows.push({id,cid,cl:String(g('cl')||''),ci:+g('ci')||null,mo:+g('mo')||0,ini:iso(g('ini')),fin:iso(g('fin')),suc:sucName(g('suc')),as:String(g('as')||''),tel:String(g('tel')||''),st:String(g('st')||''),at:+g('at')||0,up:iso(g('up')),neg:String(g('neg')||''),dom:String(g('dom')||'')}); }
+  const map={}; Object.keys(colOf).forEach(f=>map[f]=nh[colOf[f]]); jset('map',map);
+  return {rows};
+}
+async function onFile(file){
+  try{ view.msg='Leyendo…'; draw(); await loadLib(); const buf=await file.arrayBuffer(); const aoa=readSheet(buf);
+    const r=parseAOA(aoa); if(r.err){view.msg=r.err;draw();return;}
+    if(r.missing){ view.map={...r,name:file.name}; view.msg=''; draw(); return; }
+    await finish(r.rows,file.name);
+  }catch(e){ view.msg='Error: '+e.message; draw(); }
+}
+async function finish(rows,name){
+  cart={rows,meta:{name,at:new Date().toISOString(),n:rows.length}}; await idbSet('cartera',cart); view.map=null;
+  const mes=today().slice(0,7), a=analyze(mes); cortes[mes]=cortes[mes]||{}; cortes[mes][today()]=a.snap; jset('cortes',cortes);
+  const months=monthsList(); if(!months.includes(view.month)) view.month=months.includes(mes)?mes:months[0]||mes;
+  view.msg='Cartera cargada: '+rows.length.toLocaleString('es-MX')+' créditos.'; draw();
+}
+
+/* ---------- análisis ---------- */
+function monthsList(){ if(!cart) return []; const s=new Set(); cart.rows.forEach(r=>{ if(r.fin) s.add(r.fin.slice(0,7)); }); return [...s].sort().filter(m=>m>='2026-01'||true).slice(-14); }
+function analyze(month){
+  const rows=cart.rows, byC={}; rows.forEach(r=>(byC[r.cid]=byC[r.cid]||[]).push(r));
+  Object.values(byC).forEach(l=>l.sort((a,b)=>(a.ini||'').localeCompare(b.ini||'')||(a.ci||0)-(b.ci||0)));
+  const ms=month+'-01', items=[];
+  rows.forEach(r=>{ if(!r.fin||r.fin.slice(0,7)!==month) return;
+    const l=byC[r.cid], nx=l[l.indexOf(r)+1]||null, pagado=/pagad/i.test(r.st), liq=pagado?r.up:null;
+    let ren=false, adel=false, back=false;
+    if(nx){ const gap=liq?dd(liq,nx.ini):0; if(gap<=cfg.tol){ren=true; adel=nx.ini<ms;} else back=true; }
+    const m=marks[r.id]||{};
+    items.push({...r,ren,adel,back,nx,liq,hist:l,est:ren?'ren':(m.no?'no':(pagado?'lnr':'pend'))}); });
+  const sucs={}; items.forEach(i=>{ const s=sucs[i.suc]=sucs[i.suc]||{base:0,ren:0,adel:0,no:0,lnr:0,pend:0,monto:0}; s.base++; s.monto+=i.mo; s[i.est]++; if(i.adel) s.adel++; });
+  const tot={base:0,ren:0,adel:0,no:0,lnr:0,pend:0,monto:0}; Object.values(sucs).forEach(s=>Object.keys(tot).forEach(k=>tot[k]+=s[k]));
+  const snap={}; Object.entries(sucs).forEach(([k,s])=>snap[k]={b:s.base,r:s.ren,a:s.adel}); snap['*']={b:tot.base,r:tot.ren,a:tot.adel};
+  return {items,sucs,tot,snap};
+}
+
+/* ---------- pantalla ---------- */
+const mname=m=>{const n=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return n[+m.slice(5)-1]+' '+m.slice(0,4);};
+const EST={ren:'Renovó',pend:'Pendiente',no:'No renueva',lnr:'Liquidó sin renovar'};
+function draw(){
+  const R=$('#rnvRoot'); if(!R) return; let h='<div class="bar"><h2>🔁 Renovaciones</h2><span style="flex:1"></span><button class="b" data-a="close">Cerrar ✕</button></div>';
+  h+='<div class="sub">Todo se queda en este navegador (no se manda ni se respalda en ningún lado). Sube el Excel de cartera; al subir uno nuevo se actualiza solo el avance y se conservan tus motivos y comentarios.</div>';
+  h+='<div class="bar"><button class="b pri" data-a="up">📂 Subir cartera (.xlsx)</button>'+(cart?'<span class="sub">'+esc(cart.meta.name)+' · '+cart.meta.n.toLocaleString('es-MX')+' créditos · cargada '+fdate(cart.meta.at.slice(0,10))+'</span><button class="b" data-a="del">Borrar cartera</button>':'')+'</div>';
+  if(view.msg) h+='<div class="sub" style="margin:4px 0"><b>'+esc(view.msg)+'</b></div>';
+  if(view.map){ h+='<div class="card"><b>No encontré estas columnas:</b><div class="sub">Elige cuál del archivo corresponde. Se guarda y no te lo vuelvo a pedir.</div>'; view.map.missing.forEach(f=>{ h+='<div class="bar"><span style="min-width:140px">'+esc(FIELDS[f][0])+'</span><select class="in" data-map="'+f+'"><option value="">— elegir —</option>'+view.map.heads.map((x,i)=>'<option value="'+i+'">'+esc(x||'(vacía '+(i+1)+')')+'</option>').join('')+'</select></div>'; }); h+='<button class="b pri" data-a="applymap">Aplicar</button></div>'; R.innerHTML=h; return; }
+  if(!cart){ h+='<div class="card">Aún no hay cartera cargada.</div>'; R.innerHTML=h; return; }
+  const months=monthsList(); const A=analyze(view.month), T=A.tot;
+  h+='<div class="bar"><label>Vencimientos de <select class="in" data-a="month">'+months.map(m=>'<option value="'+m+'"'+(m===view.month?' selected':'')+'>'+mname(m)+'</option>').join('')+'</select></label><label class="sub">tolerancia renovación: <input class="in" style="width:48px" type="number" min="0" max="60" value="'+cfg.tol+'" data-a="tol"> días tras liquidar</label></div>';
+  const pm=pct(T.ren,T.base), pa=pct(T.ren-T.adel,T.base-T.adel), cR=Object.values(comp[view.month]||{}).reduce((a,b)=>a+(+b||0),0);
+  h+='<div class="card"><div class="big"><div><div class="n">'+pf(pm)+'</div><div class="l">Renovación del mes<br>('+T.ren+' de '+T.base+' vencimientos)</div></div><div><div class="n" style="font-size:26px">'+pf(pa)+'</div><div class="l">Avance sobre pendiente<br>('+(T.ren-T.adel)+' de '+(T.base-T.adel)+' · sin los '+T.adel+' adelantados)</div></div><div class="l">Monto vencimientos: <b>'+money(T.monto)+'</b>'+(cR?'<br>Compromiso región: <b>'+cR+'</b> renovaciones · real '+T.ren:'')+'</div></div></div>';
+  h+='<div class="card"><table><tr><th>Oficina</th><th>Venc.</th><th>Renov.</th><th>Adel.</th><th>Pend.</th><th>Liq. s/renov</th><th>No renueva</th><th>% mes</th><th>% avance</th><th>Compromiso</th></tr>';
+  Object.keys(A.sucs).sort().forEach(k=>{ const s=A.sucs[k], c=(comp[view.month]||{})[k]; h+='<tr><td>'+esc(k)+'</td><td>'+s.base+'</td><td>'+s.ren+'</td><td>'+s.adel+'</td><td>'+s.pend+'</td><td>'+s.lnr+'</td><td>'+s.no+'</td><td class="p">'+pf(pct(s.ren,s.base))+'</td><td class="p">'+pf(pct(s.ren-s.adel,s.base-s.adel))+'</td><td><input class="in cp" type="number" min="0" value="'+(c==null?'':c)+'" data-comp="'+esc(k)+'"'+(c!=null&&+c>0?'':'')+'>'+(c?' <span class="sub">'+s.ren+'/'+c+'</span>':'')+'</td></tr>'; });
+  h+='<tr><td><b>Región</b></td><td>'+T.base+'</td><td>'+T.ren+'</td><td>'+T.adel+'</td><td>'+T.pend+'</td><td>'+T.lnr+'</td><td>'+T.no+'</td><td class="p">'+pf(pm)+'</td><td class="p">'+pf(pa)+'</td><td></td></tr></table></div>';
+  const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const ds=Object.keys(ck).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de renovación en cada carga de este mes para ver cómo avanza semana a semana.</div></div>'; }
+  const cnt=k=>A.items.filter(i=>k==='todos'||i.est===k).length;
+  h+='<div class="bar">'+[['pend','Pendientes'],['lnr','Liquidó sin renovar'],['no','No renueva'],['ren','Renovados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
+  h+='<div class="bar"><select class="in" data-a="suc"><option value="">Todas las oficinas</option>'+Object.keys(A.sucs).sort().map(k=>'<option'+(view.suc===k?' selected':'')+'>'+esc(k)+'</option>').join('')+'</select><input class="in" style="flex:1;min-width:150px" placeholder="🔎 Buscar cliente o ID" value="'+esc(view.q)+'" data-a="q"></div>';
+  const q=norm(view.q); let L=A.items.filter(i=>(view.filter==='todos'||i.est===view.filter)&&(!view.suc||i.suc===view.suc)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
+  L.sort((a,b)=>(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
+  h+='<div class="sub">'+L.length+' cliente(s)</div>';
+  L.slice(0,150).forEach(i=>{ const m=marks[i.id]||{}, op=view.open===i.id, dias=dd(today(),i.fin);
+    h+='<div class="row '+i.est+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.adel?' <span class="sub">adelantado '+fdate(i.nx.ini)+'</span>':'')+(i.back?' <span class="sub">regresó '+fdate(i.nx.ini)+' (fuera de tolerancia)</span>':'')+(i.est==='lnr'&&i.liq?' <span class="sub">liquidó '+fdate(i.liq)+'</span>':'')+(m.mot?' <span class="sub">· '+esc(m.mot)+'</span>':'')+'</div>';
+    if(op){ h+='<div class="det" data-stop="1"><div>📞 <b>'+esc(i.tel||'sin teléfono')+'</b></div><div>🏪 '+esc(i.neg||'—')+'</div><div>🏠 '+esc(i.dom||'—')+'</div><div class="sub">Historial: '+i.hist.map(x=>'c'+(x.ci||'?')+' '+fdate(x.ini)+'→'+fdate(x.fin)+' '+esc(x.st)).join(' · ')+'</div>';
+      if(i.est!=='ren'){ h+='<div class="bar"><select class="in" data-mot="'+i.id+'"><option value="">Motivo…</option>'+MOTIVOS.map(x=>'<option'+(m.mot===x?' selected':'')+'>'+x+'</option>').join('')+'</select><button class="b'+(m.no?' on':'')+'" data-no="'+i.id+'">'+(m.no?'✓ No renueva (quitar)':'Marcar: no renueva')+'</button></div>'; }
+      (m.com||[]).slice().reverse().forEach(c=>{ h+='<div class="cm"><span class="sub">'+fdate(c.d)+'</span> '+esc(c.x)+'</div>'; });
+      h+='<div class="bar"><input class="in" style="flex:1" placeholder="Agregar comentario…" data-cm="'+i.id+'"><button class="b" data-cmb="'+i.id+'">Guardar</button></div></div>'; }
+    h+='</div>'; });
+  if(L.length>150) h+='<div class="sub">Mostrando 150; usa el buscador u oficina para acotar.</div>';
+  R.innerHTML=h;
+}
+function save(){ jset('marks',marks); jset('comp',comp); jset('cfg',cfg); }
+document.addEventListener('click',e=>{
+  const t=e.target; if(t.closest('#rnvOpen')){ $('#rnvPanel').classList.add('on'); draw(); return; }
+  if(!t.closest('#rnvPanel')) return;
+  const a=t.closest('[data-a]'); if(a){ const k=a.dataset.a;
+    if(k==='close') $('#rnvPanel').classList.remove('on');
+    else if(k==='up') $('#rnvFile').click();
+    else if(k==='del'){ if(confirm('¿Borrar la cartera cargada de este navegador? Tus motivos y comentarios se conservan.')){ idbDel('cartera'); cart=null; view.msg='Cartera borrada.'; draw(); } }
+    else if(k==='applymap'){ const pend={}; document.querySelectorAll('[data-map]').forEach(s=>{ if(s.value!=='') pend[s.dataset.map]=s.value; }); const r=parseAOA(view.map.aoa,pend); if(r.missing){ view.msg='Aún faltan columnas.'; draw(); return; } const nm=view.map.name; finish(r.rows,nm); } return; }
+  const f=t.closest('[data-f]'); if(f){ view.filter=f.dataset.f; draw(); return; }
+  const no=t.closest('[data-no]'); if(no){ const id=no.dataset.no, m=marks[id]=marks[id]||{}; if(!m.no&&!m.mot){ view.msg='Primero elige el motivo.'; } else m.no=!m.no; save(); draw(); return; }
+  const cb=t.closest('[data-cmb]'); if(cb){ const id=cb.dataset.cmb, inp=document.querySelector('[data-cm="'+id+'"]'), x=inp&&inp.value.trim(); if(x){ const m=marks[id]=marks[id]||{}; (m.com=m.com||[]).push({d:today(),x}); save(); draw(); } return; }
+  if(t.closest('[data-stop]')) return;
+  const row=t.closest('[data-row]'); if(row){ view.open=view.open===row.dataset.row?null:row.dataset.row; draw(); }
+});
+document.addEventListener('change',e=>{ const t=e.target; if(!t.closest('#rnvPanel')) return;
+  if(t.dataset.a==='month'){ view.month=t.value; draw(); }
+  else if(t.dataset.a==='suc'){ view.suc=t.value; draw(); }
+  else if(t.dataset.a==='tol'){ cfg.tol=Math.max(0,+t.value||0); save(); draw(); }
+  else if(t.dataset.comp!=null){ const c=comp[view.month]=comp[view.month]||{}; if(t.value==='') delete c[t.dataset.comp]; else c[t.dataset.comp]=+t.value; save(); draw(); }
+  else if(t.dataset.mot!=null){ const m=marks[t.dataset.mot]=marks[t.dataset.mot]||{}; m.mot=t.value; save(); draw(); } });
+document.addEventListener('input',e=>{ const t=e.target; if(t.dataset&&t.dataset.a==='q'&&t.closest('#rnvPanel')){ view.q=t.value; const p=t.selectionStart; draw(); const n=document.querySelector('[data-a="q"]'); if(n){n.focus(); try{n.setSelectionRange(p,p);}catch(_){}} } });
+$('#rnvFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(f) onFile(f); });
+idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().slice(0,7); view.month=m.includes(mes)?mes:(m[m.length-1]||mes); } }).catch(()=>{});
+})();
+</script>
+
 
   <button class="btn-wa" id="btnCopyDaySummary" style="display:none;">📋 Compromiso del día — dirección (WhatsApp)</button>
   <button class="btn-wa" id="btnCopyCorte" style="display:none;margin-top:8px;">🕑 Corte / cierre — dirección (WhatsApp)</button>
@@ -417,7 +607,7 @@
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.8.2 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.11.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2466,7 +2656,7 @@
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.10.0';
+  const APP_VERSION = 'v2.11.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
