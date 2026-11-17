@@ -627,6 +627,8 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div class="cubeta-detail" id="mesaDetail" style="display:none;"></div>
     <div id="firmaTile"></div>
     <div class="cubeta-detail" id="firmaDetail" style="display:none;"></div>
+    <div id="desTile"></div>
+    <div class="cubeta-detail" id="desDetail" style="display:none;"></div>
     <div class="section-title">Sucursales cargadas</div>
     <div id="branchesWrap"></div>
   </div>
@@ -647,7 +649,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.14.5 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.15.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1636,6 +1638,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     {status:'promesa_mesa', icon:'📝', label:'Pendiente de subir a mesa', color:'#C2691E', tileId:'promesaTile', detailId:'promesaDetail', innerId:'promesaTileInner'},
     {status:'analisis',     icon:'📨', label:'En mesa (análisis)', color:'#B8860B', tileId:'mesaTile',    detailId:'mesaDetail',    innerId:'mesaTileInner'},
     {status:'por_firmar',   icon:'✍️', label:'Por firmar',               color:'#1F6F5C', tileId:'firmaTile',   detailId:'firmaDetail',   innerId:'firmaTileInner'},
+    {status:'desembolsado_hoy', custom:'des', icon:'💰', label:'Desembolsados hoy', color:'#2E7D32', tileId:'desTile', detailId:'desDetail', innerId:'desTileInner'},
   ];
   let openStage = {}; // solo en memoria — qué tarjeta de etapa tiene el detalle desplegado
 
@@ -1726,7 +1729,9 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     Object.values(branches).forEach(data=>{
       (data.crecimiento||[]).forEach(e=>{
         const apl = esAplazadoHoy(e, todayT) && !e.enDate;
-        if(cfg.custom){
+        if(cfg.custom==='des'){
+          if(e.status==='desembolsado' && e.statusDate===todayT){ count++; monto += (e.monto||0); }
+        } else if(cfg.custom){
           const g = subioGrupo(e, todayT);
           if(g==='ok'){ count++; monto += (e.monto||0); } else if(g==='falta' && !apl){ nF++; mF += (e.monto||0); }
         } else if(e.status===cfg.status){
@@ -1741,7 +1746,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         <div class="n">${count}</div>
         <div class="txt">
           <div class="l">${cfg.icon} ${cfg.label}</div>
-          <div class="m">${cfg.custom ? `${fmtMoney(monto)} · faltan ${nF} (${fmtMoney(mF)}) — toca para ver el detalle` : `${fmtMoney(monto)} tentativo${nA?` · ⏸ ${nA} aplazado(s) hoy (${fmtMoney(mA)}) no cuentan`:''} — toca para ver el detalle`}</div>
+          <div class="m">${cfg.custom==='des' ? `${fmtMoney(monto)} desembolsado(s) hoy según lo que reportaron los gerentes — toca para ver el detalle` : cfg.custom ? `${fmtMoney(monto)} · faltan ${nF} (${fmtMoney(mF)}) — toca para ver el detalle` : `${fmtMoney(monto)} tentativo${nA?` · ⏸ ${nA} aplazado(s) hoy (${fmtMoney(mA)}) no cuentan`:''} — toca para ver el detalle`}</div>
         </div>
       </div>`;
     $('#'+cfg.innerId).addEventListener('click', ()=>{
@@ -1852,7 +1857,8 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     Object.entries(branches).forEach(([sucursal,data])=>{
       (data.crecimiento||[]).forEach(e=>{
         const apl = esAplazadoHoy(e, today) && !e.enDate;
-        if(cfg.custom){ const g = subioGrupo(e, today); if(g && !(g==='falta' && apl)) items.push({...e, sucursal, _g:g}); }
+        if(cfg.custom==='des'){ if(e.status==='desembolsado' && e.statusDate===today) items.push({...e, sucursal}); }
+        else if(cfg.custom){ const g = subioGrupo(e, today); if(g && !(g==='falta' && apl)) items.push({...e, sucursal, _g:g}); }
         else if(e.status===cfg.status){ if(cfg.status==='promesa_mesa' && apl) aplaz.push({...e, sucursal}); else items.push({...e, sucursal}); }
       });
     });
@@ -1865,17 +1871,18 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     const contador = pide.length ? ` · 💬 ${conCom} de ${pide.length} con comentario hoy` : '';
     wrap.style.display = '';
     wrap.innerHTML = `
-      <div class="cubeta-detail-head" style="background:${cfg.color}">${cfg.icon} ${cfg.label} — ${items.length} prospecto(s), todas las sucursales${contador}</div>
-      ${items.length ? `<div class="cdi-copybar"><button type="button" class="cdi-addbtn" data-copy-suc="">📋 Copiar para preguntar — región</button>${[...new Set(items.map(e=>e.sucursal))].sort().map(su=>`<button type="button" class="cdi-addbtn" data-copy-suc="${escapeHTML(su)}">📋 ${escapeHTML(su)}</button>`).join('')}</div>` : ''}
+      <div class="cubeta-detail-head" style="background:${cfg.color}">${cfg.icon} ${cfg.label} — ${items.length} cuenta(s)${cfg.custom==='des'?' · '+fmtMoney(items.reduce((t,e)=>t+(e.monto||0),0)):''}, todas las sucursales${contador}</div>
+      ${items.length && cfg.custom!=='des' ? `<div class="cdi-copybar"><button type="button" class="cdi-addbtn" data-copy-suc="">📋 Copiar para preguntar — región</button>${[...new Set(items.map(e=>e.sucursal))].sort().map(su=>`<button type="button" class="cdi-addbtn" data-copy-suc="${escapeHTML(su)}">📋 ${escapeHTML(su)}</button>`).join('')}</div>` : ''}
       <div class="cubeta-detail-body">
         ${items.length ? items.map(e=>{
           const u = UNIVERSOS.find(x=>x.key===e.tipo);
           const days = crecDaysOpen(e, today);
           const stale = isCrecStale(e, today);
+          const tail = cfg.custom==='des' ? (e.montoSol&&e.montoSol!==e.monto?'solicitado '+fmtMoney(e.montoSol)+' · autorizado '+fmtMoney(e.monto):'desembolsado hoy') : null;
           return `
           <div class="cubeta-detail-item">
             <span class="cdi-branch">${escapeHTML(e.sucursal)} · ${u?u.label:e.tipo}</span>
-            ${e._g==='ok'?'✅':(e._g==='falta'?'⏳':'')} ${tipoBadge(e.tipo)}<b>${escapeHTML(e.name)}</b> — ${e.monto?fmtMoney(e.monto):'sin monto'} — ${e._g==='ok'?'ya subió':(e._g==='falta'?'falta subir':crecStaleDays(e,today)===0?'entró hoy':crecStaleDays(e,today)+'d en esta etapa')}${stale&&!e._g?' — <b style="color:#b3261e">⚠ rezago</b>':''}
+            ${e._g==='ok'?'✅':(e._g==='falta'?'⏳':'')} ${tipoBadge(e.tipo)}<b>${escapeHTML(e.name)}</b> — ${e.monto?fmtMoney(e.monto):'sin monto'} — ${tail!=null?tail:e._g==='ok'?'ya subió':(e._g==='falta'?'falta subir':crecStaleDays(e,today)===0?'entró hoy':crecStaleDays(e,today)+'d en esta etapa')}${stale&&!e._g?' — <b style="color:#b3261e">⚠ rezago</b>':''}
             ${notasHTML(e, cfg, today)}
           </div>`;
         }).join('') : `<div class="alert-empty">Nada en esta etapa por ahora.</div>`}
@@ -2696,7 +2703,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.14.5';
+  const APP_VERSION = 'v2.15.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
