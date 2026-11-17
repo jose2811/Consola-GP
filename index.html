@@ -417,10 +417,11 @@ function iso(v){ if(v==null||v==='') return null;
 const dd=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
 const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);};
 const sucName=s=>String(s||'').replace(/^CI-?/i,'').trim();
+function gerOf(suc){ try{ const b=JSON.parse(localStorage.getItem('director:branches')||'{}'), k=norm(suc).slice(0,4); for(const v of Object.values(b)){ if(norm(v.sucursal||'').slice(0,4)===k&&v.gerente) return v.gerente; } }catch(e){} return ''; }
 const fdate=d=>d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(2,4):'—';
 
 let cart=null, marks=jget('marks',{}), comp=jget('comp',{}), cortes=jget('cortes',{}), cfg=jget('cfg',{tol:7});
-let view={month:today().slice(0,7),filter:'pend',suc:'',q:'',open:null,map:null,msg:''};
+let view={month:today().slice(0,7),filter:'pend',suc:'',q:'',open:null,map:null,msg:'',by:'suc'};
 
 /* ---------- carga ---------- */
 function loadLib(){return new Promise((res,rej)=>{ if(window.XLSX) return res(); const s=document.createElement('script'); s.src='xlsx.mini.min.js'; s.onload=()=>res(); s.onerror=()=>rej(new Error('No se pudo cargar el lector de Excel (necesita abrir la consola una vez con internet).')); document.head.appendChild(s); });}
@@ -457,7 +458,7 @@ async function finish(rows,name){
 }
 
 /* ---------- análisis ---------- */
-function monthsList(){ if(!cart) return []; const s=new Set(); cart.rows.forEach(r=>{ if(r.fin) s.add(r.fin.slice(0,7)); }); return [...s].sort().filter(m=>m>='2026-01'||true).slice(-14); }
+function monthsList(){ if(!cart) return []; const s=new Set(); cart.rows.forEach(r=>{ if(r.fin) s.add(r.fin.slice(0,7)); }); return [...s].sort(); }
 function analyze(month){
   const rows=cart.rows, byC={}; rows.forEach(r=>(byC[r.cid]=byC[r.cid]||[]).push(r));
   Object.values(byC).forEach(l=>l.sort((a,b)=>(a.ini||'').localeCompare(b.ini||'')||(a.ci||0)-(b.ci||0)));
@@ -490,9 +491,13 @@ function draw(){
   h+='<div class="bar"><label>Vencimientos de <select class="in" data-a="month">'+months.map(m=>'<option value="'+m+'"'+(m===view.month?' selected':'')+'>'+mname(m)+'</option>').join('')+'</select></label><label class="sub">tolerancia adelantos: <input class="in" style="width:48px" type="number" min="0" max="60" value="'+cfg.tol+'" data-a="tol"> días tras liquidar (solo si liquidó antes del mes)</label></div>';
   const pm=pct(T.ren,T.base), pa=pct(T.ren-T.adel,T.base-T.adel), cR=Object.values(comp[view.month]||{}).reduce((a,b)=>a+(+b||0),0);
   h+='<div class="card"><div class="big"><div><div class="n">'+pf(pm)+'</div><div class="l">Renovación del mes<br>('+T.ren+' de '+T.base+' vencimientos)</div></div><div><div class="n" style="font-size:26px">'+pf(pa)+'</div><div class="l">Avance sobre pendiente<br>('+(T.ren-T.adel)+' de '+(T.base-T.adel)+' · sin los '+T.adel+' adelantados)</div></div><div class="l">Monto vencimientos: <b>'+money(T.monto)+'</b>'+(cR?'<br>Compromiso región: <b>'+cR+'</b> renovaciones · real '+T.ren:'')+'</div></div></div>';
-  h+='<div class="card"><table><tr><th>Oficina</th><th>Venc.</th><th>Renov.</th><th>Adel.</th><th>Pend.</th><th>Liq. s/renov</th><th>No renueva</th><th>% mes</th><th>% avance</th><th>Compromiso</th></tr>';
-  Object.keys(A.sucs).sort().forEach(k=>{ const s=A.sucs[k], c=(comp[view.month]||{})[k]; h+='<tr><td>'+esc(k)+'</td><td>'+s.base+'</td><td>'+s.ren+'</td><td>'+s.adel+'</td><td>'+s.pend+'</td><td>'+s.lnr+'</td><td>'+s.no+'</td><td class="p">'+pf(pct(s.ren,s.base))+'</td><td class="p">'+pf(pct(s.ren-s.adel,s.base-s.adel))+'</td><td><input class="in cp" type="number" min="0" value="'+(c==null?'':c)+'" data-comp="'+esc(k)+'"'+(c!=null&&+c>0?'':'')+'>'+(c?' <span class="sub">'+s.ren+'/'+c+'</span>':'')+'</td></tr>'; });
-  h+='<tr><td><b>Región</b></td><td>'+T.base+'</td><td>'+T.ren+'</td><td>'+T.adel+'</td><td>'+T.pend+'</td><td>'+T.lnr+'</td><td>'+T.no+'</td><td class="p">'+pf(pm)+'</td><td class="p">'+pf(pa)+'</td><td></td></tr></table></div>';
+  const G={}; A.items.forEach(i=>{ const k=view.by==='as'?(i.as||'(sin asesor)'):i.suc; const g=G[k]=G[k]||{base:0,ren:0,adel:0,no:0,lnr:0,pend:0,suc:i.suc}; g.base++; g[i.est]++; if(i.adel) g.adel++; });
+  h+='<div class="bar"><button class="b'+(view.by==='suc'?' on':'')+'" data-by="suc">Por oficina / gerente</button><button class="b'+(view.by==='as'?' on':'')+'" data-by="as">Por asesor</button></div>';
+  h+='<div class="card" style="overflow:auto"><table><tr><th>'+(view.by==='as'?'Asesor':'Oficina / gerente')+'</th><th>Venc.</th><th>Renov.</th><th>Adel.</th><th>Pend.</th><th>Liq. s/renov</th><th>No renueva</th><th>% mes</th><th>% avance</th>'+(view.by==='suc'?'<th>Compromiso</th>':'')+'</tr>';
+  Object.keys(G).sort().forEach(k=>{ const s=G[k], c=(comp[view.month]||{})[k], ge=view.by==='suc'?gerOf(k):''; h+='<tr><td>'+esc(k)+(view.by==='as'?' <span class="sub">'+esc(s.suc)+'</span>':'')+(ge?'<div class="sub">'+esc(ge)+'</div>':'')+'</td><td>'+s.base+'</td><td>'+s.ren+'</td><td>'+s.adel+'</td><td>'+s.pend+'</td><td>'+s.lnr+'</td><td>'+s.no+'</td><td class="p">'+pf(pct(s.ren,s.base))+'</td><td class="p">'+pf(pct(s.ren-s.adel,s.base-s.adel))+'</td>'+(view.by==='suc'?'<td><input class="in cp" type="number" min="0" value="'+(c==null?'':c)+'" data-comp="'+esc(k)+'">'+(c?' <span class="sub">'+s.ren+'/'+c+'</span>':'')+'</td>':'')+'</tr>'; });
+  h+='<tr><td><b>Región</b></td><td>'+T.base+'</td><td>'+T.ren+'</td><td>'+T.adel+'</td><td>'+T.pend+'</td><td>'+T.lnr+'</td><td>'+T.no+'</td><td class="p">'+pf(pm)+'</td><td class="p">'+pf(pa)+'</td>'+(view.by==='suc'?'<td></td>':'')+'</tr></table></div>';
+  { const cur=today().slice(0,7), ms=months.filter(m=>m<=cur).slice(-8).reverse(), sk=Object.keys(A.sucs).sort();
+    h+='<div class="card" style="overflow:auto"><b>Meses anteriores — % de renovación por oficina</b><div class="sub">Con el estatus de hoy de cada vencimiento (clic en el mes para verlo completo).</div><table><tr><th>Mes</th>'+sk.map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ms.map(m=>{ const x=analyze(m); return '<tr><td><a href="#" data-gm="'+m+'">'+mname(m)+'</a></td>'+sk.map(k=>{const s=x.sucs[k];return '<td>'+(s?pf(pct(s.ren,s.base)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(x.tot.ren,x.tot.base))+'</td></tr>'; }).join('')+'</table></div>'; }
   const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const ds=Object.keys(ck).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de renovación en cada carga de este mes para ver cómo avanza semana a semana.</div></div>'; }
   const cnt=k=>A.items.filter(i=>k==='todos'||i.est===k).length;
   h+='<div class="bar">'+[['pend','Pendientes'],['lnr','Liquidó sin renovar'],['no','No renueva'],['ren','Renovados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
@@ -519,6 +524,8 @@ document.addEventListener('click',e=>{
     else if(k==='up') $('#rnvFile').click();
     else if(k==='del'){ if(confirm('¿Borrar la cartera cargada de este navegador? Tus motivos y comentarios se conservan.')){ idbDel('cartera'); cart=null; view.msg='Cartera borrada.'; draw(); } }
     else if(k==='applymap'){ const pend={}; document.querySelectorAll('[data-map]').forEach(s=>{ if(s.value!=='') pend[s.dataset.map]=s.value; }); const r=parseAOA(view.map.aoa,pend); if(r.missing){ view.msg='Aún faltan columnas.'; draw(); return; } const nm=view.map.name; finish(r.rows,nm); } return; }
+  const by=t.closest('[data-by]'); if(by){ view.by=by.dataset.by; draw(); return; }
+  const gm=t.closest('[data-gm]'); if(gm){ e.preventDefault(); view.month=gm.dataset.gm; draw(); $('#rnvPanel').scrollTop=0; return; }
   const f=t.closest('[data-f]'); if(f){ view.filter=f.dataset.f; draw(); return; }
   const no=t.closest('[data-no]'); if(no){ const id=no.dataset.no, m=marks[id]=marks[id]||{}; if(!m.no&&!m.mot){ view.msg='Primero elige el motivo.'; } else m.no=!m.no; save(); draw(); return; }
   const cb=t.closest('[data-cmb]'); if(cb){ const id=cb.dataset.cmb, inp=document.querySelector('[data-cm="'+id+'"]'), x=inp&&inp.value.trim(); if(x){ const m=marks[id]=marks[id]||{}; (m.com=m.com||[]).push({d:today(),x}); save(); draw(); } return; }
@@ -609,7 +616,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.11.1 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.12.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2658,7 +2665,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.11.1';
+  const APP_VERSION = 'v2.12.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
