@@ -427,7 +427,7 @@ function gerOf(suc){ try{ const b=JSON.parse(localStorage.getItem('director:bran
 const dl=(st,k,n)=>n?'<a href="#" class="dl" data-dr="'+st+'" data-k="'+esc(k)+'">'+n+'</a>':n;
 const fdate=d=>d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(2,4):'—';
 
-let cart=null, marks=jget('marks',{}), comp=jget('comp',{}), cortes=jget('cortes',{}), cfg=jget('cfg',{tol:7});
+let cart=null, marks=jget('marks',{}), comp=jget('comp',{}), cortes=jget('cortes',{}), cfg=jget('cfg',{adv:90});
 let view={as:'',month:today().slice(0,7),filter:'pend',suc:'',q:'',open:null,map:null,msg:'',by:'suc'};
 
 /* ---------- carga ---------- */
@@ -473,9 +473,10 @@ function analyze(month){
   rows.forEach(r=>{ if(!r.fin||r.fin.slice(0,7)!==month) return;
     const l=byC[r.cid], nx=l[l.indexOf(r)+1]||null, pagado=/pagad/i.test(r.st), liq=pagado?r.up:null;
     let ren=false, adel=false, back=false;
-    if(nx){ const me=month+'-31';
-      if(liq&&liq<ms){ if(dd(liq,nx.ini)<=cfg.tol){ren=true; adel=nx.ini<ms;} else back=true; } // liquidó antes del mes: solo cuenta si fue renovación inmediata (adelanto)
-      else if(nx.ini<=me){ren=true; adel=nx.ini<ms;} else back=true; } // dentro del mes: cualquier día cuenta
+    if(nx){ const me=month+'-31', early=nx.ini<=r.fin;
+      if(early){ if(dd(nx.ini,r.fin)<=cfg.adv||(liq&&dd(liq,nx.ini)<=7)){ren=true; adel=nx.ini<ms;} else back=true; } // renovó antes de su vencimiento (hasta cfg.adv días antes): adelantado
+      else if(liq&&liq<ms) back=true; // liquidó antes del mes y regresó ya pasado su vencimiento: LNR que regresó
+      else if(nx.ini<=me){ren=true;} else back=true; } // dentro del mes: cualquier día cuenta
     const m=marks[r.id]||{};
     items.push({...r,ren,adel,back,nx,liq,hist:l,est:ren?'ren':(m.no?'no':(pagado?(nx?'rec':'lnr'):'pend'))}); });
   const sucs={}; items.forEach(i=>{ const s=sucs[i.suc]=sucs[i.suc]||{base:0,ren:0,adel:0,no:0,lnr:0,rec:0,pend:0,monto:0}; s.base++; s.monto+=i.mo; s[i.est]++; if(i.adel) s.adel++; });
@@ -495,7 +496,7 @@ function draw(){
   if(view.map){ h+='<div class="card"><b>No encontré estas columnas:</b><div class="sub">Elige cuál del archivo corresponde. Se guarda y no te lo vuelvo a pedir.</div>'; view.map.missing.forEach(f=>{ h+='<div class="bar"><span style="min-width:140px">'+esc(FIELDS[f][0])+'</span><select class="in" data-map="'+f+'"><option value="">— elegir —</option>'+view.map.heads.map((x,i)=>'<option value="'+i+'">'+esc(x||'(vacía '+(i+1)+')')+'</option>').join('')+'</select></div>'; }); h+='<button class="b pri" data-a="applymap">Aplicar</button></div>'; R.innerHTML=h; return; }
   if(!cart){ h+='<div class="card">Aún no hay cartera cargada.</div>'; R.innerHTML=h; return; }
   const months=monthsList(); const A=analyze(view.month), T=A.tot;
-  h+='<div class="bar"><label>Vencimientos de <select class="in" data-a="month">'+months.map(m=>'<option value="'+m+'"'+(m===view.month?' selected':'')+'>'+mname(m)+'</option>').join('')+'</select></label><label class="sub">tolerancia adelantos: <input class="in" style="width:48px" type="number" min="0" max="60" value="'+cfg.tol+'" data-a="tol"> días tras liquidar (solo si liquidó antes del mes)</label></div>';
+  h+='<div class="bar"><label>Vencimientos de <select class="in" data-a="month">'+months.map(m=>'<option value="'+m+'"'+(m===view.month?' selected':'')+'>'+mname(m)+'</option>').join('')+'</select></label><label class="sub">adelanto máximo: <input class="in" style="width:56px" type="number" min="0" max="365" value="'+cfg.adv+'" data-a="adv"> días antes de su vencimiento (si renovó el mismo día que liquidó, cuenta sin importar cuánto antes)</label></div>';
   const pm=pct(T.ren,T.base), pa=pct(T.ren-T.adel,T.base-T.adel), cR=Object.values(comp[view.month]||{}).reduce((a,b)=>a+(+b||0),0);
   h+='<div class="card"><div class="big"><div><div class="n">'+pf(pm)+'</div><div class="l">Renovación del mes<br>('+T.ren+' de '+T.base+' vencimientos)</div></div><div><div class="n" style="font-size:26px">'+pf(pa)+'</div><div class="l">Avance sobre pendiente<br>('+(T.ren-T.adel)+' de '+(T.base-T.adel)+' · sin los '+T.adel+' adelantados)</div></div><div class="l">Monto vencimientos: <b>'+money(T.monto)+'</b>'+(cR?'<br>Compromiso región: <b>'+cR+'</b> renovaciones · real '+T.ren:'')+'</div></div></div>';
   const G={}; A.items.forEach(i=>{ const k=view.by==='as'?(i.as||'(sin asesor)'):i.suc; const g=G[k]=G[k]||{base:0,ren:0,adel:0,no:0,lnr:0,rec:0,pend:0,suc:i.suc}; g.base++; g[i.est]++; if(i.adel) g.adel++; });
@@ -558,7 +559,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{ const t=e.target; if(!t.closest('#rnvPanel')) return;
   if(t.dataset.a==='month'){ view.month=t.value; draw(); }
   else if(t.dataset.a==='suc'){ view.suc=t.value; view.as=''; draw(); }
-  else if(t.dataset.a==='tol'){ cfg.tol=Math.max(0,+t.value||0); save(); draw(); }
+  else if(t.dataset.a==='adv'){ cfg.adv=Math.max(0,+t.value||0); save(); draw(); }
   else if(t.dataset.comp!=null){ const c=comp[view.month]=comp[view.month]||{}; if(t.value==='') delete c[t.dataset.comp]; else c[t.dataset.comp]=+t.value; save(); draw(); }
   else if(t.dataset.mot!=null){ const m=marks[t.dataset.mot]=marks[t.dataset.mot]||{}; m.mot=t.value; save(); draw(); } });
 document.addEventListener('input',e=>{ const t=e.target; if(t.dataset&&t.dataset.a==='q'&&t.closest('#rnvPanel')){ view.q=t.value; const p=t.selectionStart; draw(); const n=document.querySelector('[data-a="q"]'); if(n){n.focus(); try{n.setSelectionRange(p,p);}catch(_){}} } });
@@ -642,7 +643,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.13.1 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.13.2 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2691,7 +2692,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.13.1';
+  const APP_VERSION = 'v2.13.2';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
