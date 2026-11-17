@@ -465,7 +465,9 @@ function analyze(month){
   rows.forEach(r=>{ if(!r.fin||r.fin.slice(0,7)!==month) return;
     const l=byC[r.cid], nx=l[l.indexOf(r)+1]||null, pagado=/pagad/i.test(r.st), liq=pagado?r.up:null;
     let ren=false, adel=false, back=false;
-    if(nx){ const gap=liq?dd(liq,nx.ini):0; if(gap<=cfg.tol){ren=true; adel=nx.ini<ms;} else back=true; }
+    if(nx){ const me=month+'-31';
+      if(liq&&liq<ms){ if(dd(liq,nx.ini)<=cfg.tol){ren=true; adel=nx.ini<ms;} else back=true; } // liquidó antes del mes: solo cuenta si fue renovación inmediata (adelanto)
+      else if(nx.ini<=me){ren=true; adel=nx.ini<ms;} else back=true; } // dentro del mes: cualquier día cuenta
     const m=marks[r.id]||{};
     items.push({...r,ren,adel,back,nx,liq,hist:l,est:ren?'ren':(m.no?'no':(pagado?'lnr':'pend'))}); });
   const sucs={}; items.forEach(i=>{ const s=sucs[i.suc]=sucs[i.suc]||{base:0,ren:0,adel:0,no:0,lnr:0,pend:0,monto:0}; s.base++; s.monto+=i.mo; s[i.est]++; if(i.adel) s.adel++; });
@@ -485,7 +487,7 @@ function draw(){
   if(view.map){ h+='<div class="card"><b>No encontré estas columnas:</b><div class="sub">Elige cuál del archivo corresponde. Se guarda y no te lo vuelvo a pedir.</div>'; view.map.missing.forEach(f=>{ h+='<div class="bar"><span style="min-width:140px">'+esc(FIELDS[f][0])+'</span><select class="in" data-map="'+f+'"><option value="">— elegir —</option>'+view.map.heads.map((x,i)=>'<option value="'+i+'">'+esc(x||'(vacía '+(i+1)+')')+'</option>').join('')+'</select></div>'; }); h+='<button class="b pri" data-a="applymap">Aplicar</button></div>'; R.innerHTML=h; return; }
   if(!cart){ h+='<div class="card">Aún no hay cartera cargada.</div>'; R.innerHTML=h; return; }
   const months=monthsList(); const A=analyze(view.month), T=A.tot;
-  h+='<div class="bar"><label>Vencimientos de <select class="in" data-a="month">'+months.map(m=>'<option value="'+m+'"'+(m===view.month?' selected':'')+'>'+mname(m)+'</option>').join('')+'</select></label><label class="sub">tolerancia renovación: <input class="in" style="width:48px" type="number" min="0" max="60" value="'+cfg.tol+'" data-a="tol"> días tras liquidar</label></div>';
+  h+='<div class="bar"><label>Vencimientos de <select class="in" data-a="month">'+months.map(m=>'<option value="'+m+'"'+(m===view.month?' selected':'')+'>'+mname(m)+'</option>').join('')+'</select></label><label class="sub">tolerancia adelantos: <input class="in" style="width:48px" type="number" min="0" max="60" value="'+cfg.tol+'" data-a="tol"> días tras liquidar (solo si liquidó antes del mes)</label></div>';
   const pm=pct(T.ren,T.base), pa=pct(T.ren-T.adel,T.base-T.adel), cR=Object.values(comp[view.month]||{}).reduce((a,b)=>a+(+b||0),0);
   h+='<div class="card"><div class="big"><div><div class="n">'+pf(pm)+'</div><div class="l">Renovación del mes<br>('+T.ren+' de '+T.base+' vencimientos)</div></div><div><div class="n" style="font-size:26px">'+pf(pa)+'</div><div class="l">Avance sobre pendiente<br>('+(T.ren-T.adel)+' de '+(T.base-T.adel)+' · sin los '+T.adel+' adelantados)</div></div><div class="l">Monto vencimientos: <b>'+money(T.monto)+'</b>'+(cR?'<br>Compromiso región: <b>'+cR+'</b> renovaciones · real '+T.ren:'')+'</div></div></div>';
   h+='<div class="card"><table><tr><th>Oficina</th><th>Venc.</th><th>Renov.</th><th>Adel.</th><th>Pend.</th><th>Liq. s/renov</th><th>No renueva</th><th>% mes</th><th>% avance</th><th>Compromiso</th></tr>';
@@ -499,7 +501,7 @@ function draw(){
   L.sort((a,b)=>(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
   h+='<div class="sub">'+L.length+' cliente(s)</div>';
   L.slice(0,150).forEach(i=>{ const m=marks[i.id]||{}, op=view.open===i.id, dias=dd(today(),i.fin);
-    h+='<div class="row '+i.est+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.adel?' <span class="sub">adelantado '+fdate(i.nx.ini)+'</span>':'')+(i.back?' <span class="sub">regresó '+fdate(i.nx.ini)+' (fuera de tolerancia)</span>':'')+(i.est==='lnr'&&i.liq?' <span class="sub">liquidó '+fdate(i.liq)+'</span>':'')+(m.mot?' <span class="sub">· '+esc(m.mot)+'</span>':'')+'</div>';
+    h+='<div class="row '+i.est+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.adel?' <span class="sub">adelantado '+fdate(i.nx.ini)+'</span>':'')+(i.back?' <span class="sub">regresó '+fdate(i.nx.ini)+' (ya fuera del mes / liquidó antes)</span>':'')+(i.est==='lnr'&&i.liq?' <span class="sub">liquidó '+fdate(i.liq)+'</span>':'')+(m.mot?' <span class="sub">· '+esc(m.mot)+'</span>':'')+'</div>';
     if(op){ h+='<div class="det" data-stop="1"><div>📞 <b>'+esc(i.tel||'sin teléfono')+'</b></div><div>🏪 '+esc(i.neg||'—')+'</div><div>🏠 '+esc(i.dom||'—')+'</div><div class="sub">Historial: '+i.hist.map(x=>'c'+(x.ci||'?')+' '+fdate(x.ini)+'→'+fdate(x.fin)+' '+esc(x.st)).join(' · ')+'</div>';
       if(i.est!=='ren'){ h+='<div class="bar"><select class="in" data-mot="'+i.id+'"><option value="">Motivo…</option>'+MOTIVOS.map(x=>'<option'+(m.mot===x?' selected':'')+'>'+x+'</option>').join('')+'</select><button class="b'+(m.no?' on':'')+'" data-no="'+i.id+'">'+(m.no?'✓ No renueva (quitar)':'Marcar: no renueva')+'</button></div>'; }
       (m.com||[]).slice().reverse().forEach(c=>{ h+='<div class="cm"><span class="sub">'+fdate(c.d)+'</span> '+esc(c.x)+'</div>'; });
@@ -607,7 +609,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.11.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.11.1 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2656,7 +2658,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.11.0';
+  const APP_VERSION = 'v2.11.1';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
