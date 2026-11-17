@@ -510,7 +510,7 @@ function draw(){
   h+='<tr>'+rowH('<b>Región</b>','',T,view.by==='suc'?'<td class="p">'+(hasC?cSum:'—')+'</td><td class="p">'+(hasC?pf(pct(T.ren+cSum,T.base)):'—')+'</td>':'')+'</tr></table><div class="sub" style="margin-top:6px">Las 3 grandes: <b>Venc.</b> · <b>Reno.</b> (todo el que ya tiene crédito nuevo, incluye adelantados y regresados) · <b>Por Renovar</b> (= Venc. − Reno. − N.Ren). Después de la línea: Adel. (dentro de Reno.) · Liq S/R (liquidó sin renovar, dentro de Por Renovar) · N.Ren (no renueva, marcado por ti). # Comp. = cuántos de los Por Renovar se comprometen a renovar; % Comp. = (Reno. + # Comp.) / Venc.</div></div>';
   { const cur=today().slice(0,7), ms=months.filter(m=>m<=cur).slice(-8).reverse(), sk=Object.keys(A.sucs).sort();
     h+='<div class="card" style="overflow:auto"><b>Meses anteriores — % de renovación por oficina</b><div class="sub">Con el estatus de hoy de cada vencimiento (clic en el mes para verlo completo).</div><table><tr><th>Mes</th>'+sk.map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ms.map(m=>{ const x=analyze(m); return '<tr><td><a href="#" data-gm="'+m+'">'+mname(m)+'</a></td>'+sk.map(k=>{const s=x.sucs[k];return '<td>'+(s?pf(pct(s.ren,s.base)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(x.tot.ren,x.tot.base))+'</td></tr>'; }).join('')+'</table></div>'; }
-  const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const ds=Object.keys(ck).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de renovación en cada carga de este mes para ver cómo avanza semana a semana.</div></div>'; }
+  const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const wk=d=>{ const x=new Date(d+'T12:00:00Z'); const dow=(x.getUTCDay()+6)%7; x.setUTCDate(x.getUTCDate()-dow); return x.toISOString().slice(0,10); }, byW={}; Object.keys(ck).sort().forEach(d=>{ byW[wk(d)]=d; }); const ds=Object.values(byW).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de cada carga; aquí se muestra el último corte de cada semana (lunes a sábado), así no se llena aunque cargues a diario.</div></div>'; }
   const cnt=k=>A.items.filter(i=>hit(i,k)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length;
   h+='<div class="bar">'+[['por','Por renovar'],['lnr','Liquidó sin renovar'],['no','No renueva'],['pt','Pendientes (total)'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
   h+='<div class="bar"><select class="in" data-a="suc"><option value="">Todas las oficinas</option>'+Object.keys(A.sucs).sort().map(k=>'<option'+(view.suc===k?' selected':'')+'>'+esc(k)+'</option>').join('')+'</select><input class="in" style="flex:1;min-width:150px" placeholder="🔎 Buscar cliente o ID" value="'+esc(view.q)+'" data-a="q"></div>';
@@ -647,7 +647,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.14.4 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.14.5 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2696,7 +2696,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.14.4';
+  const APP_VERSION = 'v2.14.5';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
