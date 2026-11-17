@@ -368,9 +368,10 @@
 .rnv .big{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end}
 .rnv .big .n{font-size:34px;font-weight:800;line-height:1}.rnv .big .l{font-size:11px;color:#6b7480}
 .rnv table{width:100%;border-collapse:collapse;font-size:12.5px}
-.rnv th{font-size:10.5px;text-transform:uppercase;color:#6b7480;text-align:right;padding:4px 6px;border-bottom:1px solid #e1e5ea}
-.rnv td{padding:6px;text-align:right;border-bottom:1px solid #f0f2f4}.rnv th:first-child,.rnv td:first-child{text-align:left}
+.rnv th{font-size:10.5px;text-transform:uppercase;color:#6b7480;text-align:center;padding:4px 6px;border-bottom:1px solid #e1e5ea}
+.rnv td{padding:6px;text-align:center;border-bottom:1px solid #f0f2f4}.rnv th:first-child,.rnv td:first-child{text-align:left}
 .rnv td.p{font-weight:800}
+.rnv th.pr{color:#B4571F;background:#fdf3ec}.rnv td.pr{font-size:16px;font-weight:800;color:#B4571F;background:#fdf3ec}.rnv td.pr a.dl{color:#B4571F}
 .rnv .bd{display:inline-block;font-size:10.5px;font-weight:800;border-radius:99px;padding:2px 8px;color:#fff}
 .rnv .bd.ren{background:#1F6F5C}.rnv .bd.pend{background:#b7791f}.rnv .bd.no{background:#c0392b}.rnv .bd.lnr{background:#6b4fa0}.rnv .bd.adel{background:#2f9e7a}
 .rnv .row{background:#fff;border:1px solid #e1e5ea;border-left:4px solid #b7791f;border-radius:10px;padding:9px 11px;margin:7px 0;cursor:pointer}
@@ -501,9 +502,9 @@ function draw(){
   const G={}; A.items.forEach(i=>{ const k=view.by==='as'?(i.as||'(sin asesor)'):i.suc; const g=G[k]=G[k]||{...Z0(),suc:i.suc}; g.base++; if(i.renew){ g.ren++; if(i.adel) g.adel++; } else { g.pt++; if(i.est==='no') g.no++; else { g.por++; if(i.est==='lnr') g.lnr++; } } });
   h+='<div class="bar"><button class="b'+(view.by==='suc'?' on':'')+'" data-by="suc">Por oficina / gerente</button><button class="b'+(view.by==='as'?' on':'')+'" data-by="as">Por asesor</button></div>';
   const G2='color:#8a93a0';
-  h+='<div class="card" style="overflow:auto"><table><tr><th>'+(view.by==='as'?'Asesor':'Oficina / gerente')+'</th><th title="Vencimientos del mes">Venc.</th><th title="Renovados (incluye adelantados)">Reno.</th><th title="Pend. − No renueva">Por Renovar</th><th style="border-left:2px solid #1c2430;'+G2+'" title="Adelantados: ya incluidos en Reno.">Adel.</th><th style="'+G2+'" title="Liquidó sin renovar (dentro de Pend.)">Liq S/R</th><th style="'+G2+'" title="No renueva (dentro de Pend.)">N.Ren</th><th>%Mes</th><th title="Avance sobre lo pendiente (sin adelantados)">% Avance</th>'+(view.by==='suc'?'<th title="Compromiso: cuántos de los Por renovar se comprometen a renovar"># Comp.</th><th title="% de renovación si cumplen el compromiso: (Reno. + Comp.) / Venc.">% Comp.</th>':'')+'</tr>';
+  h+='<div class="card" style="overflow:auto"><table><tr><th>'+(view.by==='as'?'Asesor':'Oficina / gerente')+'</th><th title="Vencimientos del mes">Venc.</th><th title="Renovados (incluye adelantados)">Reno.</th><th class="pr" title="Venc. − Reno. − N.Ren">Por Renovar</th><th style="border-left:2px solid #1c2430;'+G2+'" title="Adelantados: ya incluidos en Reno.">Adel.</th><th style="'+G2+'" title="Liquidó sin renovar (dentro de Pend.)">Liq S/R</th><th style="'+G2+'" title="No renueva (dentro de Pend.)">N.Ren</th><th>%Mes</th><th title="Avance sobre lo pendiente (sin adelantados)">% Avance</th>'+(view.by==='suc'?'<th title="Compromiso: cuántos de los Por renovar se comprometen a renovar"># Comp.</th><th title="% de renovación si cumplen el compromiso: (Reno. + Comp.) / Venc.">% Comp.</th>':'')+'</tr>';
   const DV='border-left:2px solid #1c2430;';
-  const rowH=(lab,k,s,cmp)=>'<td>'+lab+'</td><td class="p">'+dl('todos',k,s.base)+'</td><td class="p">'+dl('ren',k,s.ren)+'</td><td class="p">'+dl('por',k,s.por)+'</td><td style="'+DV+G2+'">'+dl('adel',k,s.adel)+'</td><td style="'+G2+'">'+dl('lnr',k,s.lnr)+'</td><td style="'+G2+'">'+dl('no',k,s.no)+'</td><td class="p">'+pf(pct(s.ren,s.base))+'</td><td class="p">'+pf(pct(s.ren-s.adel,s.base-s.adel))+'</td>'+(cmp==null?'':cmp);
+  const rowH=(lab,k,s,cmp)=>'<td>'+lab+'</td><td class="p">'+dl('todos',k,s.base)+'</td><td class="p">'+dl('ren',k,s.ren)+'</td><td class="p pr">'+dl('por',k,s.por)+'</td><td style="'+DV+G2+'">'+dl('adel',k,s.adel)+'</td><td style="'+G2+'">'+dl('lnr',k,s.lnr)+'</td><td style="'+G2+'">'+dl('no',k,s.no)+'</td><td class="p">'+pf(pct(s.ren,s.base))+'</td><td class="p">'+pf(pct(s.ren-s.adel,s.base-s.adel))+'</td>'+(cmp==null?'':cmp);
   Object.keys(G).sort().forEach(k=>{ const s=G[k], c=(comp[view.month]||{})[k], ge=view.by==='suc'?gerOf(k):''; h+='<tr>'+rowH(esc(k)+(view.by==='as'?' <span class="sub">'+esc(s.suc)+'</span>':'')+(ge?'<div class="sub">'+esc(ge)+'</div>':''),k,s,view.by==='suc'?'<td><input class="in cp" type="number" min="0" value="'+(c==null?'':c)+'" data-comp="'+esc(k)+'">'+(c!=null&&+c>s.por?' <span class="warn" title="Más que los Por renovar">!</span>':'')+'</td><td class="p">'+(c==null||c===''?'—':pf(pct(s.ren+(+c),s.base)))+'</td>':'')+'</tr>'; });
   const cSum=Object.values(comp[view.month]||{}).reduce((a,b)=>a+(+b||0),0), hasC=Object.keys(comp[view.month]||{}).length>0;
   h+='<tr>'+rowH('<b>Región</b>','',T,view.by==='suc'?'<td class="p">'+(hasC?cSum:'—')+'</td><td class="p">'+(hasC?pf(pct(T.ren+cSum,T.base)):'—')+'</td>':'')+'</tr></table><div class="sub" style="margin-top:6px">Las 3 grandes: <b>Venc.</b> · <b>Reno.</b> (todo el que ya tiene crédito nuevo, incluye adelantados y regresados) · <b>Por Renovar</b> (= Venc. − Reno. − N.Ren). Después de la línea: Adel. (dentro de Reno.) · Liq S/R (liquidó sin renovar, dentro de Por Renovar) · N.Ren (no renueva, marcado por ti). # Comp. = cuántos de los Por Renovar se comprometen a renovar; % Comp. = (Reno. + # Comp.) / Venc.</div></div>';
@@ -646,7 +647,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.14.3 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.14.4 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2695,7 +2696,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.14.3';
+  const APP_VERSION = 'v2.14.4';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
