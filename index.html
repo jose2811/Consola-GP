@@ -840,6 +840,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         el.innerHTML = `✅ Actualizado ${hora} — sin cambios nuevos`;
         el.className = 'buzon-status ok';
       }
+      if(s.ignored) el.innerHTML += ` · 🧪 ${s.ignored} reporte(s) de prueba ignorado(s)`;
     }else{
       el.innerHTML = `⚠️ Último intento ${hora} falló — ${escapeHTML(s.error||'sin conexión')}`;
       el.className = 'buzon-status err';
@@ -930,6 +931,10 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     return o;
   }
 
+  // Oficinas/gerentes de PRUEBA: si el nombre de la sucursal o del gerente trae
+  // "prueba", "test" o "demo", el reporte llega al buzón pero la consola lo ignora.
+  const TEST_RX = /prueba|test|demo/i;
+  function isTestReport(sucursal, gerente){ return TEST_RX.test((sucursal||'')+' '+(gerente||'')); }
   async function fetchFromBuzon(silent){
     if(!BUZON_URL){ if(!silent) toast('Buzón no configurado'); return; }
     setBuzonLoading(true);
@@ -946,12 +951,13 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         if(!silent) toast('No se pudo leer el buzón: ' + errMsg);
         return;
       }
-      let count = 0;
+      let count = 0, ignored = 0;
       const changed = [];
       Object.keys(json.branches||{}).forEach(rawKey=>{
         const entry = json.branches[rawKey];
         if(!entry || !entry.data) return;
         const displayName = entry.sucursalOriginal || rawKey;
+        if(isTestReport(displayName, entry.data.gerente || entry.gerente)){ ignored++; return; }
         const key = normSucursal(displayName);
         const dat = adaptV2(entry.data);
         const before = branches[key] ? JSON.stringify(stripDirectorOnly(branches[key])) : null;
@@ -963,6 +969,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       });
       const nuevosCortes = {};
       Object.keys(json.cortesHoy||{}).forEach(rawKey=>{
+        if(isTestReport(rawKey, '')) return;
         const key = normSucursal(rawKey);
         nuevosCortes[key] = (json.cortesHoy[rawKey]||[]).map(c=>c.data ? adaptV2(c.data) : null).filter(Boolean);
       });
@@ -970,7 +977,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       saveBranches(branches);
       saveArchive(archive);
       saveCortesHoy(cortesHoyPorSucursal);
-      saveBuzonStatus({ts: Date.now(), ok:true, changed, count});
+      saveBuzonStatus({ts: Date.now(), ok:true, changed, count, ignored});
       render();
       if(!silent) toast(count ? `Actualizado — ${count} sucursal(es) del buzón` : 'El buzón todavía no tiene envíos');
     }catch(err){
@@ -2711,7 +2718,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
 
-  const APP_VERSION = 'v2.16.1';
+  const APP_VERSION = 'v2.17.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
