@@ -337,6 +337,16 @@
 </style>
 </head>
 <body>
+<script>
+// MODO PRUEBA: guarda todo con otro prefijo (test:) y usa otra base de cartera; los datos reales no se tocan.
+window.TESTMODE = (function(){ try{ return localStorage.getItem('consola:testmode')==='1'; }catch(e){ return false; } })();
+if(window.TESTMODE){
+  const P=Storage.prototype, g=P.getItem, st=P.setItem, rm=P.removeItem;
+  const m=k=>(typeof k==='string'&&k.indexOf('director:')===0)?'test:'+k:k;
+  P.getItem=function(k){return g.call(this,m(k));}; P.setItem=function(k,v){return st.call(this,m(k),v);}; P.removeItem=function(k){return rm.call(this,m(k));};
+}
+</script>
+<div id="testBar" style="display:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px 12px">🧪 CONSOLA DE PRUEBA — datos separados; tu concentrado real no se toca · <button id="btnSalirPrueba" type="button" style="margin-left:8px;border:0;border-radius:6px;padding:3px 10px;font-weight:700;cursor:pointer">Salir</button></div>
 <div class="app">
 
   <div class="brand-bar">
@@ -350,6 +360,7 @@
 
   <button class="btn-refresh" id="btnActualizarBuzon">🔄 Actualizar desde el buzón</button>
   <div class="buzon-status" id="buzonStatus">Aún no se ha actualizado desde el buzón.</div>
+  <div style="text-align:center;margin:4px 0"><button type="button" id="btnModoPrueba" style="background:none;border:0;color:#7c3aed;font-size:12px;cursor:pointer;text-decoration:underline">🧪 Entrar a la consola de prueba</button></div>
 <!-- ===== Renovaciones (v2.11.0) — todo local: la cartera vive en IndexedDB de este navegador, nunca sale ===== -->
 <style>
 #rnvOpen{width:100%;padding:12px;border:0;border-radius:10px;background:#B4571F;color:#fff;font-weight:700;font-size:14px;cursor:pointer}
@@ -395,7 +406,7 @@ const money=n=>'$'+Math.round(n||0).toLocaleString('es-MX');
 const pct=(a,b)=>b>0?Math.round(a*1000/b)/10:null, pf=v=>v==null?'—':v+'%';
 const jget=(k,d)=>{try{const v=localStorage.getItem(LS+k);return v?JSON.parse(v):d}catch(e){return d}};
 const jset=(k,v)=>{try{localStorage.setItem(LS+k,JSON.stringify(v))}catch(e){}};
-function idb(){return new Promise((res,rej)=>{const r=indexedDB.open('consola-gp-cartera',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open(window.TESTMODE?'consola-gp-cartera-test':'consola-gp-cartera',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 async function idbGet(k){const db=await idb();return new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
 async function idbSet(k,v){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
 async function idbDel(k){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
@@ -935,6 +946,8 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
   // "prueba", "test" o "demo", el reporte llega al buzón pero la consola lo ignora.
   const TEST_RX = /prueba|test|demo/i;
   function isTestReport(sucursal, gerente){ return TEST_RX.test((sucursal||'')+' '+(gerente||'')); }
+  // En consola real se ignoran los reportes de prueba; en consola de prueba, los reales.
+  function skipReport(sucursal, gerente){ return window.TESTMODE ? !isTestReport(sucursal,gerente) : isTestReport(sucursal,gerente); }
   async function fetchFromBuzon(silent){
     if(!BUZON_URL){ if(!silent) toast('Buzón no configurado'); return; }
     setBuzonLoading(true);
@@ -957,7 +970,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         const entry = json.branches[rawKey];
         if(!entry || !entry.data) return;
         const displayName = entry.sucursalOriginal || rawKey;
-        if(isTestReport(displayName, entry.data.gerente || entry.gerente)){ ignored++; return; }
+        if(skipReport(displayName, entry.data.gerente || entry.gerente)){ if(!window.TESTMODE) ignored++; return; }
         const key = normSucursal(displayName);
         const dat = adaptV2(entry.data);
         const before = branches[key] ? JSON.stringify(stripDirectorOnly(branches[key])) : null;
@@ -969,7 +982,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       });
       const nuevosCortes = {};
       Object.keys(json.cortesHoy||{}).forEach(rawKey=>{
-        if(isTestReport(rawKey, '')) return;
+        if(skipReport(rawKey, '')) return;
         const key = normSucursal(rawKey);
         nuevosCortes[key] = (json.cortesHoy[rawKey]||[]).map(c=>c.data ? adaptV2(c.data) : null).filter(Boolean);
       });
@@ -2717,8 +2730,14 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
   }
 
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
+  (function(){
+    const flip=on=>{ try{ localStorage.setItem('consola:testmode', on?'1':'0'); }catch(e){} location.reload(); };
+    if(window.TESTMODE){ $('#testBar').style.display=''; $('#btnModoPrueba').style.display='none'; document.title='🧪 PRUEBA — '+document.title; }
+    $('#btnSalirPrueba').addEventListener('click',()=>flip(false));
+    $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
+  })();
 
-  const APP_VERSION = 'v2.17.0';
+  const APP_VERSION = 'v2.18.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
