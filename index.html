@@ -386,7 +386,7 @@ if(window.TESTMODE){
 .rnv td.p{font-weight:800}
 .rnv th.pr{color:#B4571F;background:#fdf3ec}.rnv td.pr{font-size:16px;font-weight:800;color:#B4571F;background:#fdf3ec}.rnv td.pr a.dl{color:#B4571F}
 .rnv .bd{display:inline-block;font-size:10.5px;font-weight:800;border-radius:99px;padding:2px 8px;color:#fff}
-.rnv .bd.ren{background:#1F6F5C}.rnv .bd.pend{background:#b7791f}.rnv .bd.no{background:#c0392b}.rnv .bd.lnr{background:#6b4fa0}.rnv .bd.adel{background:#2f9e7a}
+.rnv .bd.ren{background:#1F6F5C}.rnv .bd.pend{background:#b7791f}.rnv .bd.no{background:#c0392b}.rnv .bd.lnr{background:#6b4fa0}.rnv .bd.leg{background:#4a5260}.rnv .bd.adel{background:#2f9e7a}
 .rnv .row{background:#fff;border:1px solid #e1e5ea;border-left:4px solid #b7791f;border-radius:10px;padding:9px 11px;margin:7px 0;cursor:pointer}
 .rnv .row.ren{border-left-color:#1F6F5C}.rnv .row.no{border-left-color:#c0392b}.rnv .row.lnr{border-left-color:#6b4fa0}.rnv .row.adel{border-left-color:#2f9e7a}
 .rnv .row .t{display:flex;justify-content:space-between;gap:8px;font-weight:700}
@@ -485,25 +485,29 @@ function analyze(month){
   const rows=cart.rows, byC={}; rows.forEach(r=>(byC[r.cid]=byC[r.cid]||[]).push(r));
   Object.values(byC).forEach(l=>l.sort((a,b)=>(a.ini||'').localeCompare(b.ini||'')||(a.ci||0)-(b.ci||0)));
   const ms=month+'-01', items=[];
-  const arr=[];
+  const arr=[], leg=[], fd=(()=>{ const d=new Date((cart.meta&&cart.meta.at)||Date.now()); return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); })(), trans=Math.max(0,dd(ms,fd));
   rows.forEach(r=>{ if(!r.fin) return; const rm=r.fin.slice(0,7); if(rm!==month&&!(rm<month&&marks[r.id]&&marks[r.id].g&&marks[r.id].g!=='no')) return;
     const l=byC[r.cid], nx=l[l.indexOf(r)+1]||null, pagado=/pagad/i.test(r.st), liq=pagado?r.up:null;
     const renew=!!nx, adel=renew&&((nx.ini<ms)||(liq&&liq<ms)); // renovó = tiene un crédito posterior; adelantado = liquidó o renovó antes de que empezara el mes
     const m=marks[r.id]||{}, g=m.g||(m.no?'no':''), td=today();
     const cp=!renew&&(g==='tiempo'||g==='si'), cvenc=!renew&&!!g&&g!=='no'&&!!m.fc&&m.fc<td;
     const it={...r,renew,adel,nx,liq,hist:l,g,fc:m.fc||'',cp,cvenc,est:renew?(adel?'adel':'ren'):(g==='no'?'no':(pagado?'lnr':'pend'))};
+    // En legal: a los 61+ días de atraso ya no es cartera de gestión. Se estima el atraso AL INICIO del mes
+    // (atraso del archivo − días transcurridos desde el 1°); si llegó a 61 durante el mes, sigue contando.
+    const at0=(r.at||0)-trans; it.at0=at0;
+    if(!renew&&r.fin.slice(0,7)===month&&(at0>=61||/castigad/i.test(r.st))){ it.leg=true; it.est='leg'; it.cp=false; it.cvenc=false; leg.push(it); return; }
     if(r.fin.slice(0,7)!==month){ it.arr=true; it.cp=false; arr.push(it); } else items.push(it); });
   const Z=()=>({base:0,ren:0,adel:0,pt:0,lnr:0,no:0,por:0,cp:0,cv:0,monto:0}), add=(s,i)=>{ if(i.cp) s.cp++; if(i.cvenc) s.cv++; s.base++; s.monto+=i.mo; if(i.renew){ s.ren++; if(i.adel) s.adel++; } else { s.pt++; if(i.est==='no') s.no++; else { s.por++; if(i.est==='lnr') s.lnr++; } } };
   const sucs={}; items.forEach(i=>add(sucs[i.suc]=sucs[i.suc]||Z(),i));
   const tot=Z(); items.forEach(i=>add(tot,i));
   const snap={}; Object.entries(sucs).forEach(([k,s])=>snap[k]={b:s.base,r:s.ren,a:s.adel}); snap['*']={b:tot.base,r:tot.ren,a:tot.adel};
-  return {items,arr,sucs,tot,snap};
+  return {items,arr,leg,sucs,tot,snap};
 }
 
 /* ---------- pantalla ---------- */
 const Z0=()=>({base:0,ren:0,adel:0,pt:0,lnr:0,no:0,por:0,cp:0,cv:0});
 const mname=m=>{const n=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return n[+m.slice(5)-1]+' '+m.slice(0,4);};
-const EST={ren:'Renovó',adel:'Renovó (adelantado)',pend:'Pendiente',no:'No renueva',lnr:'Liquidó sin renovar'};
+const EST={ren:'Renovó',adel:'Renovó (adelantado)',pend:'Pendiente',no:'No renueva',lnr:'Liquidó sin renovar',leg:'⚖️ En legal'};
 const hit=(i,k)=>k==='seg'?(!i.renew&&SEG.includes(i.g)):k==='vis'?(!i.renew&&i.g==='visita'):k==='todos'||k==='cp'&&i.cp||k==='cv'&&i.cvenc||k==='enmes'&&i.renew&&!i.adel||k!=='cp'&&k!=='cv'&&k!=='enmes'&&(k==='ren'?i.renew:(k==='adel'?i.adel:(k==='pt'?!i.renew:(k==='por'?(i.est==='pend'||i.est==='lnr'):i.est===k))));
 function draw(){
   const R=$('#rnvRoot'); if(!R) return; let h='<div class="bar"><h2>🔁 Renovaciones</h2><span style="flex:1"></span><button class="b" data-a="close">Cerrar ✕</button></div>';
@@ -518,6 +522,7 @@ function draw(){
   h+='<div class="card"><div class="big"><div><div class="n">'+pf(pm)+'</div><div class="l">Renovación del mes<br>('+T.ren+' de '+T.base+' vencimientos · '+T.adel+' adelantados incluidos)</div></div><div><div class="n" style="font-size:26px">'+pf(pa)+'</div><div class="l">Avance sobre lo pendiente<br>('+(T.ren-T.adel)+' de '+(T.base-T.adel)+' · sin los adelantados)</div></div><div class="l">Monto vencimientos: <b>'+money(T.monto)+'</b>'+(cR?'<br>Compromiso región: <b>'+cR+'</b> renovaciones · real '+T.ren:'')+'</div></div></div>';
   if(T.cv) h+='<div class="card" style="border-color:#c0392b;background:#fdf0ee"><b style="color:#c0392b">⏰ '+T.cv+' compromiso(s) vencido(s) — volver a preguntar</b> <button class="b" data-f="cv">Ver cuáles</button></div>';
   const G={}; A.items.forEach(i=>{ const k=view.by==='as'?(i.as||'(sin asesor)'):i.suc; const g=G[k]=G[k]||{...Z0(),suc:i.suc}; g.base++; if(i.cp) g.cp++; if(i.cvenc) g.cv++; if(i.renew){ g.ren++; if(i.adel) g.adel++; } else { g.pt++; if(i.est==='no') g.no++; else { g.por++; if(i.est==='lnr') g.lnr++; } } });
+  if(A.leg.length) h+='<div class="sub" style="margin:4px 2px">⚖️ <b>'+A.leg.length+'</b> cuenta(s) con 61+ días de atraso al inicio del mes están en legal y <b>no cuentan</b> en Venc. <button class="b" data-f="leg">ver cuáles</button></div>';
   h+='<div class="bar"><button class="b'+(view.by==='suc'?' on':'')+'" data-by="suc">Por oficina / gerente</button><button class="b'+(view.by==='as'?' on':'')+'" data-by="as">Por asesor</button></div>';
   const G2='color:#8a93a0';
   h+='<div class="card" style="overflow:auto"><table><tr><th>'+(view.by==='as'?'Asesor':'Oficina / gerente')+'</th><th title="Vencimientos del mes">Venc.</th><th title="Renovados (incluye adelantados)">Reno.</th><th class="pr" title="Venc. − Reno. − N.Ren">Por Renovar</th><th style="border-left:2px solid #1c2430;'+G2+'" title="Adelantados: ya incluidos en Reno.">Adel.</th><th style="'+G2+'" title="Liquidó sin renovar (dentro de Pend.)">Liq S/R</th><th style="'+G2+'" title="No renueva (dentro de Pend.)">N.Ren</th><th>%Mes</th><th title="Base = Venc. − Adel.: lo que quedaba por trabajar al empezar el mes" style="border-left:2px solid #1c2430">Base</th><th title="En el mes = Reno. − Adel.: renovaron dentro del mes">En el mes</th><th title="% Avance = En el mes / Base">% Avance</th>'+(view.by==='suc'?'<th title="Compromiso: clientes marcados \"Renueva en tiempo\" o \"Sí renueva\" que aún no renuevan (se suma solo)"># Comp.</th><th title="% de renovación si cumplen el compromiso: (Reno. + Comp.) / Venc.">% Comp.</th>':'')+'</tr>';
@@ -528,10 +533,10 @@ function draw(){
   { const cur=today().slice(0,7), ms=months.filter(m=>m<=cur).slice(-8).reverse(), sk=Object.keys(A.sucs).sort();
     h+='<div class="card" style="overflow:auto"><b>Meses anteriores — % de renovación por oficina</b><div class="sub">Con el estatus de hoy de cada vencimiento (clic en el mes para verlo completo).</div><table><tr><th>Mes</th>'+sk.map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ms.map(m=>{ const x=analyze(m); return '<tr><td><a href="#" data-gm="'+m+'">'+mname(m)+'</a></td>'+sk.map(k=>{const s=x.sucs[k];return '<td>'+(s?pf(pct(s.ren,s.base)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(x.tot.ren,x.tot.base))+'</td></tr>'; }).join('')+'</table></div>'; }
   const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const wk=d=>{ const x=new Date(d+'T12:00:00Z'); const dow=(x.getUTCDay()+6)%7; x.setUTCDate(x.getUTCDate()-dow); return x.toISOString().slice(0,10); }, byW={}; Object.keys(ck).sort().forEach(d=>{ byW[wk(d)]=d; }); const ds=Object.values(byW).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de cada carga; aquí se muestra el último corte de cada semana (lunes a sábado), así no se llena aunque cargues a diario.</div></div>'; }
-  const cnt=k=>k==='arr'?A.arr.filter(i=>!i.renew&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length:A.items.filter(i=>hit(i,k)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length;
-  h+='<div class="bar">'+[['por','Por renovar'],['cp','Comprometidos'],['cv','⏰ Compromiso vencido'],['seg','👀 En seguimiento'],['arr','↪ Arrastre de meses anteriores'],['vis','🚶 Visitas pendientes'],['lnr','Liquidó sin renovar'],['no','No renueva'],['pt','Pendientes (total)'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
+  const cnt=k=>k==='leg'?A.leg.filter(i=>(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length:k==='arr'?A.arr.filter(i=>!i.renew&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length:A.items.filter(i=>hit(i,k)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length;
+  h+='<div class="bar">'+[['por','Por renovar'],['cp','Comprometidos'],['cv','⏰ Compromiso vencido'],['seg','👀 En seguimiento'],['arr','↪ Arrastre de meses anteriores'],['leg','⚖️ En legal (no cuentan)'],['vis','🚶 Visitas pendientes'],['lnr','Liquidó sin renovar'],['no','No renueva'],['pt','Pendientes (total)'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
   h+='<div class="bar"><select class="in" data-a="suc"><option value="">Todas las oficinas</option>'+Object.keys(A.sucs).sort().map(k=>'<option'+(view.suc===k?' selected':'')+'>'+esc(k)+'</option>').join('')+'</select><input class="in" style="flex:1;min-width:150px" placeholder="🔎 Buscar cliente o ID" value="'+esc(view.q)+'" data-a="q"></div>';
-  const q=norm(view.q); let L=(view.filter==='arr'?A.arr:A.items).filter(i=>(view.filter==='arr'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
+  const q=norm(view.q); let L=(view.filter==='arr'?A.arr:view.filter==='leg'?A.leg:A.items).filter(i=>(view.filter==='arr'||view.filter==='leg'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
   L.sort((a,b)=>((view.filter==='cp'||view.filter==='cv')?(a.fc||'9').localeCompare(b.fc||'9'):0)||(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
   h+='<div id="rnvList" class="bar"><span class="sub"><b>'+L.length+'</b> cliente(s)'+(view.as?' · asesor: <b>'+esc(view.as)+'</b> <a href="#" data-clras="1">quitar ✕</a>':'')+'</span><span style="flex:1"></span><button class="b" data-a="copylist">📋 Copiar lista (WhatsApp)</button></div>';
   L.slice(0,150).forEach(i=>{ const m=marks[i.id]||{}, op=view.open===i.id, dias=dd(today(),i.fin);
@@ -546,9 +551,9 @@ function draw(){
 }
 function copyList(){
   const A=analyze(view.month), q=norm(view.q);
-  const L=(view.filter==='arr'?A.arr:A.items).filter(i=>(view.filter==='arr'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q))).sort((a,b)=>a.suc.localeCompare(b.suc)||a.as.localeCompare(b.as)||(a.fin||'').localeCompare(b.fin||''));
+  const L=(view.filter==='arr'?A.arr:view.filter==='leg'?A.leg:A.items).filter(i=>(view.filter==='arr'||view.filter==='leg'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q))).sort((a,b)=>a.suc.localeCompare(b.suc)||a.as.localeCompare(b.as)||(a.fin||'').localeCompare(b.fin||''));
   if(!L.length){ view.msg='No hay clientes en esta lista.'; draw(); return; }
-  const tit={arr:'Arrastre de meses anteriores',seg:'En seguimiento',vis:'Visitas pendientes',por:'Por renovar',pt:'Pendientes',lnr:'Liquidó sin renovar',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
+  const tit={leg:'En legal',arr:'Arrastre de meses anteriores',seg:'En seguimiento',vis:'Visitas pendientes',por:'Por renovar',pt:'Pendientes',lnr:'Liquidó sin renovar',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
   let out='*'+tit+' — '+mname(view.month)+'* ('+L.length+')\n'; let cs=null;
   L.forEach((i,n)=>{ if(i.suc!==cs){ cs=i.suc; out+='\n*'+cs+'*\n'; } const m=marks[i.id]||{};
     out+=(n+1)+'. '+i.cl+' — '+money(i.mo)+' · '+i.as.split(' ').slice(0,2).join(' ')+' · vence '+fdate(i.fin)+(i.liq?' · liquidó '+fdate(i.liq):'')+(i.renew?' · renovó '+fdate(i.nx.ini):'')+(i.g&&!i.renew?' · '+GL[i.g]+(i.g==='no'&&marks[i.id]&&marks[i.id].mot?' ('+marks[i.id].mot+')':'')+(i.fc&&i.g!=='no'?' · compromiso '+fdate(i.fc)+(i.cvenc?' VENCIDO':''):''):'')+(i.at>0?' · '+i.at+'d atraso':'')+(m.mot?' · '+m.mot:'')+'\n'; });
@@ -673,7 +678,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.20.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.21.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2744,7 +2749,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.20.0';
+  const APP_VERSION = 'v2.21.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
