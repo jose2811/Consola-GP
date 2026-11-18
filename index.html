@@ -485,17 +485,19 @@ function analyze(month){
   const rows=cart.rows, byC={}; rows.forEach(r=>(byC[r.cid]=byC[r.cid]||[]).push(r));
   Object.values(byC).forEach(l=>l.sort((a,b)=>(a.ini||'').localeCompare(b.ini||'')||(a.ci||0)-(b.ci||0)));
   const ms=month+'-01', items=[];
-  rows.forEach(r=>{ if(!r.fin||r.fin.slice(0,7)!==month) return;
+  const arr=[];
+  rows.forEach(r=>{ if(!r.fin) return; const rm=r.fin.slice(0,7); if(rm!==month&&!(rm<month&&marks[r.id]&&marks[r.id].g&&marks[r.id].g!=='no')) return;
     const l=byC[r.cid], nx=l[l.indexOf(r)+1]||null, pagado=/pagad/i.test(r.st), liq=pagado?r.up:null;
     const renew=!!nx, adel=renew&&((nx.ini<ms)||(liq&&liq<ms)); // renovó = tiene un crédito posterior; adelantado = liquidó o renovó antes de que empezara el mes
     const m=marks[r.id]||{}, g=m.g||(m.no?'no':''), td=today();
     const cp=!renew&&(g==='tiempo'||g==='si'), cvenc=!renew&&!!g&&g!=='no'&&!!m.fc&&m.fc<td;
-    items.push({...r,renew,adel,nx,liq,hist:l,g,fc:m.fc||'',cp,cvenc,est:renew?(adel?'adel':'ren'):(g==='no'?'no':(pagado?'lnr':'pend'))}); });
+    const it={...r,renew,adel,nx,liq,hist:l,g,fc:m.fc||'',cp,cvenc,est:renew?(adel?'adel':'ren'):(g==='no'?'no':(pagado?'lnr':'pend'))};
+    if(r.fin.slice(0,7)!==month){ it.arr=true; it.cp=false; arr.push(it); } else items.push(it); });
   const Z=()=>({base:0,ren:0,adel:0,pt:0,lnr:0,no:0,por:0,cp:0,cv:0,monto:0}), add=(s,i)=>{ if(i.cp) s.cp++; if(i.cvenc) s.cv++; s.base++; s.monto+=i.mo; if(i.renew){ s.ren++; if(i.adel) s.adel++; } else { s.pt++; if(i.est==='no') s.no++; else { s.por++; if(i.est==='lnr') s.lnr++; } } };
   const sucs={}; items.forEach(i=>add(sucs[i.suc]=sucs[i.suc]||Z(),i));
   const tot=Z(); items.forEach(i=>add(tot,i));
   const snap={}; Object.entries(sucs).forEach(([k,s])=>snap[k]={b:s.base,r:s.ren,a:s.adel}); snap['*']={b:tot.base,r:tot.ren,a:tot.adel};
-  return {items,sucs,tot,snap};
+  return {items,arr,sucs,tot,snap};
 }
 
 /* ---------- pantalla ---------- */
@@ -526,10 +528,10 @@ function draw(){
   { const cur=today().slice(0,7), ms=months.filter(m=>m<=cur).slice(-8).reverse(), sk=Object.keys(A.sucs).sort();
     h+='<div class="card" style="overflow:auto"><b>Meses anteriores — % de renovación por oficina</b><div class="sub">Con el estatus de hoy de cada vencimiento (clic en el mes para verlo completo).</div><table><tr><th>Mes</th>'+sk.map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ms.map(m=>{ const x=analyze(m); return '<tr><td><a href="#" data-gm="'+m+'">'+mname(m)+'</a></td>'+sk.map(k=>{const s=x.sucs[k];return '<td>'+(s?pf(pct(s.ren,s.base)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(x.tot.ren,x.tot.base))+'</td></tr>'; }).join('')+'</table></div>'; }
   const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const wk=d=>{ const x=new Date(d+'T12:00:00Z'); const dow=(x.getUTCDay()+6)%7; x.setUTCDate(x.getUTCDate()-dow); return x.toISOString().slice(0,10); }, byW={}; Object.keys(ck).sort().forEach(d=>{ byW[wk(d)]=d; }); const ds=Object.values(byW).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de cada carga; aquí se muestra el último corte de cada semana (lunes a sábado), así no se llena aunque cargues a diario.</div></div>'; }
-  const cnt=k=>A.items.filter(i=>hit(i,k)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length;
-  h+='<div class="bar">'+[['por','Por renovar'],['cp','Comprometidos'],['cv','⏰ Compromiso vencido'],['seg','👀 En seguimiento'],['vis','🚶 Visitas pendientes'],['lnr','Liquidó sin renovar'],['no','No renueva'],['pt','Pendientes (total)'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
+  const cnt=k=>k==='arr'?A.arr.filter(i=>!i.renew&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length:A.items.filter(i=>hit(i,k)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length;
+  h+='<div class="bar">'+[['por','Por renovar'],['cp','Comprometidos'],['cv','⏰ Compromiso vencido'],['seg','👀 En seguimiento'],['arr','↪ Arrastre de meses anteriores'],['vis','🚶 Visitas pendientes'],['lnr','Liquidó sin renovar'],['no','No renueva'],['pt','Pendientes (total)'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
   h+='<div class="bar"><select class="in" data-a="suc"><option value="">Todas las oficinas</option>'+Object.keys(A.sucs).sort().map(k=>'<option'+(view.suc===k?' selected':'')+'>'+esc(k)+'</option>').join('')+'</select><input class="in" style="flex:1;min-width:150px" placeholder="🔎 Buscar cliente o ID" value="'+esc(view.q)+'" data-a="q"></div>';
-  const q=norm(view.q); let L=A.items.filter(i=>hit(i,view.filter)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
+  const q=norm(view.q); let L=(view.filter==='arr'?A.arr:A.items).filter(i=>(view.filter==='arr'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
   L.sort((a,b)=>((view.filter==='cp'||view.filter==='cv')?(a.fc||'9').localeCompare(b.fc||'9'):0)||(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
   h+='<div id="rnvList" class="bar"><span class="sub"><b>'+L.length+'</b> cliente(s)'+(view.as?' · asesor: <b>'+esc(view.as)+'</b> <a href="#" data-clras="1">quitar ✕</a>':'')+'</span><span style="flex:1"></span><button class="b" data-a="copylist">📋 Copiar lista (WhatsApp)</button></div>';
   L.slice(0,150).forEach(i=>{ const m=marks[i.id]||{}, op=view.open===i.id, dias=dd(today(),i.fin);
@@ -544,9 +546,9 @@ function draw(){
 }
 function copyList(){
   const A=analyze(view.month), q=norm(view.q);
-  const L=A.items.filter(i=>hit(i,view.filter)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q))).sort((a,b)=>a.suc.localeCompare(b.suc)||a.as.localeCompare(b.as)||(a.fin||'').localeCompare(b.fin||''));
+  const L=(view.filter==='arr'?A.arr:A.items).filter(i=>(view.filter==='arr'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q))).sort((a,b)=>a.suc.localeCompare(b.suc)||a.as.localeCompare(b.as)||(a.fin||'').localeCompare(b.fin||''));
   if(!L.length){ view.msg='No hay clientes en esta lista.'; draw(); return; }
-  const tit={seg:'En seguimiento',vis:'Visitas pendientes',por:'Por renovar',pt:'Pendientes',lnr:'Liquidó sin renovar',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
+  const tit={arr:'Arrastre de meses anteriores',seg:'En seguimiento',vis:'Visitas pendientes',por:'Por renovar',pt:'Pendientes',lnr:'Liquidó sin renovar',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
   let out='*'+tit+' — '+mname(view.month)+'* ('+L.length+')\n'; let cs=null;
   L.forEach((i,n)=>{ if(i.suc!==cs){ cs=i.suc; out+='\n*'+cs+'*\n'; } const m=marks[i.id]||{};
     out+=(n+1)+'. '+i.cl+' — '+money(i.mo)+' · '+i.as.split(' ').slice(0,2).join(' ')+' · vence '+fdate(i.fin)+(i.liq?' · liquidó '+fdate(i.liq):'')+(i.renew?' · renovó '+fdate(i.nx.ini):'')+(i.g&&!i.renew?' · '+GL[i.g]+(i.g==='no'&&marks[i.id]&&marks[i.id].mot?' ('+marks[i.id].mot+')':'')+(i.fc&&i.g!=='no'?' · compromiso '+fdate(i.fc)+(i.cvenc?' VENCIDO':''):''):'')+(i.at>0?' · '+i.at+'d atraso':'')+(m.mot?' · '+m.mot:'')+'\n'; });
@@ -671,7 +673,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.19.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.20.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2742,7 +2744,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.19.0';
+  const APP_VERSION = 'v2.20.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
