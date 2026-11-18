@@ -346,7 +346,9 @@ if(window.TESTMODE){
   P.getItem=function(k){return g.call(this,m(k));}; P.setItem=function(k,v){return st.call(this,m(k),v);}; P.removeItem=function(k){return rm.call(this,m(k));};
 }
 </script>
-<div id="testBar" style="display:none;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px 12px">🧪 CONSOLA DE PRUEBA — datos separados; tu concentrado real no se toca · <button id="btnSalirPrueba" type="button" style="margin-left:8px;border:0;border-radius:6px;padding:3px 10px;font-weight:700;cursor:pointer">Salir</button></div>
+<div id="testFrame" style="display:none;position:fixed;inset:0;border:3px solid #7c3aed;pointer-events:none;z-index:9998"></div>
+<div id="testTab" style="display:none;position:fixed;right:0;top:120px;z-index:9999;background:#7c3aed;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;padding:6px 9px;border-radius:8px 0 0 8px;pointer-events:none;transition:top .15s ease-out;box-shadow:0 2px 6px rgba(0,0,0,.25)">🧪 PRUEBA</div>
+<div id="testBar" style="display:none;text-align:center;padding:6px"><button id="btnSalirPrueba" type="button" style="background:#7c3aed;color:#fff;border:0;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">🧪 Salir de la consola de prueba</button></div>
 <div class="app">
 
   <div class="brand-bar">
@@ -668,7 +670,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.16.1 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.18.2 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2732,12 +2734,14 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
   $('#btnActualizarBuzon').addEventListener('click', ()=> fetchFromBuzon(false));
   (function(){
     const flip=on=>{ try{ localStorage.setItem('consola:testmode', on?'1':'0'); }catch(e){} location.reload(); };
-    if(window.TESTMODE){ $('#testBar').style.display=''; $('#btnModoPrueba').style.display='none'; document.title='🧪 PRUEBA — '+document.title; }
+    if(window.TESTMODE){ $('#testBar').style.display=''; $('#testFrame').style.display=''; $('#testTab').style.display='';
+      const pos=()=>{ const t=$('#testTab'), max=document.documentElement.scrollHeight-innerHeight, p=max>0?Math.min(1,scrollY/max):0; t.style.top=Math.round(70+p*(innerHeight-130-t.offsetHeight))+'px'; };
+      addEventListener('scroll',pos,{passive:true}); addEventListener('resize',pos); pos(); $('#btnModoPrueba').style.display='none'; document.title='🧪 PRUEBA — '+document.title; }
     $('#btnSalirPrueba').addEventListener('click',()=>flip(false));
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.18.1';
+  const APP_VERSION = 'v2.18.2';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
