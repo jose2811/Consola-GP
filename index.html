@@ -388,6 +388,7 @@ if(window.TESTMODE){
 .rnv .bd{display:inline-block;font-size:10.5px;font-weight:800;border-radius:99px;padding:2px 8px;color:#fff}
 .rnv .bd.ren{background:#1F6F5C}.rnv .bd.pend{background:#b7791f}.rnv .bd.no{background:#c0392b}.rnv .bd.lnr{background:#6b4fa0}.rnv .bd.leg{background:#4a5260}.rnv .bd.adel{background:#2f9e7a}
 .rnv .row{background:#fff;border:1px solid #e1e5ea;border-left:4px solid #b7791f;border-radius:10px;padding:9px 11px;margin:7px 0;cursor:pointer}
+.rnv .row.flash{position:relative;z-index:2;animation:rnvFlash 1.6s ease-out}@keyframes rnvFlash{0%{background:#fff3b0;box-shadow:0 0 0 3px #f2c94c}100%{background:#fff;box-shadow:none}}
 .rnv .row.ren{border-left-color:#1F6F5C}.rnv .row.no{border-left-color:#c0392b}.rnv .row.lnr{border-left-color:#6b4fa0}.rnv .row.adel{border-left-color:#2f9e7a}
 .rnv .row .t{display:flex;justify-content:space-between;gap:8px;font-weight:700}
 .rnv .det{margin-top:8px;border-top:1px dashed #d9dde2;padding-top:8px;cursor:default}
@@ -413,7 +414,8 @@ async function idbGet(k){const db=await idb();return new Promise((res,rej)=>{con
 async function idbSet(k,v){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
 async function idbDel(k){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
 
-const MOTIVOS=['No quiso renovar','Mora / buró','Mal historial de pago','Negocio cerrado / sin actividad','No lo han visitado','No localizado','Se fue a otra financiera','Prestanombre','Fraude','Otro'];
+const MOTIVOS=['No quiso renovar','Mora/Buró/Atrasos constantes','Rechazado desde Approval','Rechazado por mesa','Sin negocio','Sin inventario','No localizado','Fraude','Prestanombres','Se va a legal (llega a 61 días este mes)','Otro'];
+const tsOf=id=>{ const m=marks[id]||{}; return m.ts||(m.com&&m.com.length?(Date.parse(m.com[m.com.length-1].d+'T12:00:00')||1):(m.g?1:0)); };
 const FIELDS={ // campo: [etiqueta, alias normalizados, requerido]
   id:['ID crédito',['saficreditoid','creditoid','idcredito','nocredito','credito'],1],
   cid:['ID cliente',['safiClienteID','clienteid','idcliente','nocliente'],1],
@@ -443,7 +445,7 @@ const dl=(st,k,n)=>n?'<a href="#" class="dl" data-dr="'+st+'" data-k="'+esc(k)+'
 const fdate=d=>d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(2,4):'—';
 
 let cart=null, marks=jget('marks',{}), comp=jget('comp',{}), cortes=jget('cortes',{}), cfg=jget('cfg',{adv:90});
-let view={as:'',month:today().slice(0,7),filter:'por',suc:'',q:'',open:null,map:null,msg:'',by:'suc'};
+let view={mot:'',flash:null,as:'',month:today().slice(0,7),filter:'por',suc:'',q:'',open:null,map:null,msg:'',by:'suc'};
 
 /* ---------- carga ---------- */
 function loadLib(){return new Promise((res,rej)=>{ if(window.XLSX) return res(); const s=document.createElement('script'); s.src='xlsx.mini.min.js'; s.onload=()=>res(); s.onerror=()=>rej(new Error('No se pudo cargar el lector de Excel (necesita abrir la consola una vez con internet).')); document.head.appendChild(s); });}
@@ -510,7 +512,7 @@ const mname=m=>{const n=['enero','febrero','marzo','abril','mayo','junio','julio
 const EST={ren:'Renovó',adel:'Renovó (adelantado)',pend:'Pendiente',no:'No renueva',lnr:'Liquidó sin renovar',leg:'⚖️ En legal'};
 const hit=(i,k)=>k==='seg'?(!i.renew&&SEG.includes(i.g)):k==='vis'?(!i.renew&&i.g==='visita'):k==='todos'||k==='cp'&&i.cp||k==='cv'&&i.cvenc||k==='enmes'&&i.renew&&!i.adel||k!=='cp'&&k!=='cv'&&k!=='enmes'&&(k==='ren'?i.renew:(k==='adel'?i.adel:(k==='pt'?!i.renew:(k==='por'?(i.est==='pend'||i.est==='lnr'):i.est===k))));
 function draw(){
-  const R=$('#rnvRoot'); if(!R) return; let h='<div class="bar"><h2>🔁 Renovaciones</h2><span style="flex:1"></span><button class="b" data-a="close">Cerrar ✕</button></div>';
+  const R=$('#rnvRoot'); if(!R) return; const oldTop={}; R.querySelectorAll('[data-row]').forEach(r=>{ oldTop[r.dataset.row]=r.getBoundingClientRect().top; }); let h='<div class="bar"><h2>🔁 Renovaciones</h2><span style="flex:1"></span><button class="b" data-a="close">Cerrar ✕</button></div>';
   h+='<div class="sub">Todo se queda en este navegador (no se manda ni se respalda en ningún lado). Sube el Excel de cartera; al subir uno nuevo se actualiza solo el avance y se conservan tus motivos y comentarios.</div>';
   h+='<div class="bar"><button class="b pri" data-a="up">📂 Subir cartera (.xlsx)</button>'+(cart?'<span class="sub">'+esc(cart.meta.name)+' · '+cart.meta.n.toLocaleString('es-MX')+' créditos · cargada '+fdate(cart.meta.at.slice(0,10))+'</span><button class="b" data-a="del">Borrar cartera</button>':'')+'</div>';
   if(view.msg) h+='<div class="sub" style="margin:4px 0"><b>'+esc(view.msg)+'</b></div>';
@@ -535,23 +537,51 @@ function draw(){
   const ck=cortes[view.month]; if(ck&&Object.keys(ck).length){ const wk=d=>{ const x=new Date(d+'T12:00:00Z'); const dow=(x.getUTCDay()+6)%7; x.setUTCDate(x.getUTCDate()-dow); return x.toISOString().slice(0,10); }, byW={}; Object.keys(ck).sort().forEach(d=>{ byW[wk(d)]=d; }); const ds=Object.values(byW).sort().slice(-8); h+='<div class="card"><b>Cortes (cada vez que subes cartera)</b><table><tr><th>Fecha</th>'+Object.keys(A.sucs).sort().map(k=>'<th>'+esc(k)+'</th>').join('')+'<th>Región</th></tr>'+ds.map(d=>'<tr><td>'+fdate(d)+'</td>'+Object.keys(A.sucs).sort().map(k=>{const x=ck[d][k];return '<td>'+(x?pf(pct(x.r,x.b)):'—')+'</td>';}).join('')+'<td class="p">'+pf(pct(ck[d]['*'].r,ck[d]['*'].b))+'</td></tr>').join('')+'</table><div class="sub">Se guarda el % de cada carga; aquí se muestra el último corte de cada semana (lunes a sábado), así no se llena aunque cargues a diario.</div></div>'; }
   const cnt=k=>k==='leg'?A.leg.filter(i=>(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length:k==='arr'?A.arr.filter(i=>!i.renew&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length:A.items.filter(i=>hit(i,k)&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).length;
   h+='<div class="bar">'+[['por','Por renovar'],['cp','Comprometidos'],['cv','⏰ Compromiso vencido'],['seg','👀 En seguimiento'],['arr','↪ Arrastre de meses anteriores'],['leg','⚖️ En legal (no cuentan)'],['vis','🚶 Visitas pendientes'],['lnr','Liquidó sin renovar'],['no','No renueva'],['pt','Pendientes (total)'],['ren','Renovados'],['adel','Adelantados'],['todos','Todos']].map(([k,l])=>'<button class="b'+(view.filter===k?' on':'')+'" data-f="'+k+'">'+l+' · '+cnt(k)+'</button>').join('')+'</div>';
+  if(view.filter==='no'){ const cm={}; A.items.filter(i=>hit(i,'no')&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)).forEach(i=>{ const k=(marks[i.id]||{}).mot||'(sin motivo)'; cm[k]=(cm[k]||0)+1; });
+    h+='<div class="bar"><select class="in" data-a="mot"><option value="">Todos los motivos</option>'+Object.keys(cm).sort((a,b)=>cm[b]-cm[a]).map(k=>'<option value="'+esc(k==='(sin motivo)'?'':k)+'"'+(view.mot===k?' selected':'')+'>'+esc(k)+' ('+cm[k]+')</option>').join('')+'</select></div>'; }
   h+='<div class="bar"><select class="in" data-a="suc"><option value="">Todas las oficinas</option>'+Object.keys(A.sucs).sort().map(k=>'<option'+(view.suc===k?' selected':'')+'>'+esc(k)+'</option>').join('')+'</select><input class="in" style="flex:1;min-width:150px" placeholder="🔎 Buscar cliente o ID" value="'+esc(view.q)+'" data-a="q"></div>';
-  const q=norm(view.q); let L=(view.filter==='arr'?A.arr:view.filter==='leg'?A.leg:A.items).filter(i=>(view.filter==='arr'||view.filter==='leg'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
-  L.sort((a,b)=>((view.filter==='cp'||view.filter==='cv')?(a.fc||'9').localeCompare(b.fc||'9'):0)||(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
+  const q=norm(view.q); let L=(view.filter==='arr'?A.arr:view.filter==='leg'?A.leg:A.items).filter(i=>(view.filter==='arr'||view.filter==='leg'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(view.filter!=='no'||!view.mot||((marks[i.id]||{}).mot||'')===view.mot)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q)));
+  L.sort((a,b)=>((view.filter==='cp'||view.filter==='cv')?(a.fc||'9').localeCompare(b.fc||'9'):tsOf(a.id)-tsOf(b.id))||(a.fin||'').localeCompare(b.fin||'')||b.at-a.at);
   h+='<div id="rnvList" class="bar"><span class="sub"><b>'+L.length+'</b> cliente(s)'+(view.as?' · asesor: <b>'+esc(view.as)+'</b> <a href="#" data-clras="1">quitar ✕</a>':'')+'</span><span style="flex:1"></span><button class="b" data-a="copylist">📋 Copiar lista (WhatsApp)</button></div>';
   L.slice(0,150).forEach(i=>{ const m=marks[i.id]||{}, op=view.open===i.id, dias=dd(today(),i.fin);
     h+='<div class="row '+i.est+(i.cvenc?' cv':'')+'" data-row="'+i.id+'"><div class="t"><span>'+esc(i.cl)+' <span class="sub">#'+i.cid+'</span></span><span>'+money(i.mo)+'</span></div><div class="sub">'+esc(i.suc)+' · '+esc(i.as)+' · ciclo '+(i.ci||'—')+' · vence '+fdate(i.fin)+(i.est==='pend'?(dias<0?' <span class="warn">('+(-dias)+'d vencido)</span>':' ('+dias+'d)'):'')+(i.at>0?' · <span class="warn">'+i.at+'d atraso</span>':'')+'</div><div style="margin-top:3px"><span class="bd '+i.est+'">'+EST[i.est]+'</span>'+(i.renew?' <span class="sub">renovó <b>'+fdate(i.nx.ini)+'</b> (ciclo '+(i.nx.ci||'?')+', '+esc((i.nx.as||'').split(' ').slice(0,2).join(' '))+')'+(i.liq?' · liquidó <b>'+fdate(i.liq)+'</b> · '+(dd(i.liq,i.nx.ini)<=0?'mismo día':dd(i.liq,i.nx.ini)+' d después'):'')+'</span>':(i.est==='lnr'&&i.liq?' <span class="sub"><b>liquidó '+fdate(i.liq)+'</b> (hace '+dd(i.liq,today())+' d)</span>':''))+gestHTML(i,m)+'</div>'+noteHTML(m);
     if(op){ h+='<div class="det" data-stop="1"><div>📞 <b>'+esc(i.tel||'sin teléfono')+'</b></div><div>🏪 '+esc(i.neg||'—')+'</div><div>🏠 '+esc(i.dom||'—')+'</div><div class="sub">Historial: '+i.hist.map(x=>'c'+(x.ci||'?')+' '+fdate(x.ini)+'→'+fdate(x.fin)+' '+esc(x.st)).join(' · ')+'</div>';
-      if(!i.renew){ const sel=i.g==='no'?'no|'+(m.mot||''):(i.g||''); h+='<div class="bar"><select class="in" data-g="'+i.id+'"><option value="">Gestión…</option><optgroup label="✅ Compromiso (cuenta)">'+['tiempo','si'].map(x=>'<option value="'+x+'"'+(sel===x?' selected':'')+'>'+GL[x]+'</option>').join('')+'</optgroup><optgroup label="👀 En seguimiento (no cuenta)">'+SEG.map(x=>'<option value="'+x+'"'+(sel===x?' selected':'')+'>'+GL[x]+'</option>').join('')+'</optgroup><optgroup label="❌ No renueva — motivo">'+MOTIVOS.map(x=>'<option value="no|'+x+'"'+(sel==='no|'+x?' selected':'')+'>'+x+'</option>').join('')+'</optgroup></select><label class="sub">📅 fecha compromiso <input class="in" type="date" value="'+esc(m.fc||'')+'" data-fc="'+i.id+'"></label></div>'; }
+      if(!i.renew){ const sel=i.g==='no'?'no|'+(m.mot||''):(i.g||''); h+='<div class="bar"><select class="in" data-g="'+i.id+'"><option value="">Gestión…</option><optgroup label="✅ Compromiso (cuenta)">'+['tiempo','si'].map(x=>'<option value="'+x+'"'+(sel===x?' selected':'')+'>'+GL[x]+'</option>').join('')+'</optgroup><optgroup label="👀 En seguimiento (no cuenta)">'+SEG.map(x=>'<option value="'+x+'"'+(sel===x?' selected':'')+'>'+GL[x]+'</option>').join('')+'</optgroup><optgroup label="❌ No renueva — motivo">'+MOTIVOS.concat(m.mot&&!MOTIVOS.includes(m.mot)?[m.mot]:[]).map(x=>'<option value="no|'+x+'"'+(sel==='no|'+x?' selected':'')+'>'+x+'</option>').join('')+'</optgroup></select><label class="sub">📅 fecha compromiso <input class="in" type="date" value="'+esc(m.fc||'')+'" data-fc="'+i.id+'"></label></div>'; }
       (m.com||[]).slice().reverse().forEach(c=>{ h+='<div class="cm"><span class="sub">'+fdate(c.d)+'</span> '+esc(c.x)+'</div>'; });
       h+='<div class="bar"><input class="in" style="flex:1" placeholder="Agregar comentario…" data-cm="'+i.id+'"><button class="b" data-cmb="'+i.id+'">Guardar</button></div></div>'; }
     h+='</div>'; });
   if(L.length>150) h+='<div class="sub">Mostrando 150; usa el buscador u oficina para acotar.</div>';
   R.innerHTML=h;
+  // animación: las tarjetas que cambian de lugar se deslizan; la que acabas de tocar parpadea al irse al fondo
+  R.querySelectorAll('[data-row]').forEach(r=>{ const id=r.dataset.row, o=oldTop[id]; if(o!=null){ const dy=o-r.getBoundingClientRect().top; if(Math.abs(dy)>3){ r.style.transition='none'; r.style.transform='translateY('+dy+'px)'; r.getBoundingClientRect(); r.style.transition='transform .9s cubic-bezier(.2,.8,.2,1)'; r.style.transform=''; } } if(view.flash===id) r.classList.add('flash'); });
+  view.flash=null;
+}
+// Ventanita al elegir una gestión: compromiso/seguimiento → fecha obligatoria + comentario opcional; no renueva → comentario obligatorio.
+function askGest(id,v){
+  const isNo=v.indexOf('no|')===0, m=marks[id]||{}, nm=((document.querySelector('[data-row="'+id+'"] .t span')||{}).textContent||'').replace(/#\d+$/,'').trim();
+  const lab=isNo?'❌ No renueva — '+v.slice(3):(SEG.includes(v)?'👀 ':'✅ ')+GL[v];
+  const ov=document.createElement('div'); ov.id='rnvModal'; ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML='<div style="background:#fff;border-radius:12px;padding:16px;width:100%;max-width:420px;box-shadow:0 10px 30px rgba(0,0,0,.3)" class="rnv"><div style="font-weight:800">'+esc(nm)+'</div><div class="sub" style="margin:2px 0 10px">'+esc(lab)+'</div>'
+   +(isNo?'':'<label class="sub">📅 Fecha compromiso <b style="color:#c0392b">(obligatoria)</b><br><input class="in" type="date" id="gmFc" value="'+esc(m.fc||'')+'" style="width:100%;margin-top:3px"></label><div style="height:8px"></div>')
+   +'<label class="sub">💬 Comentario '+(isNo?'<b style="color:#c0392b">(obligatorio)</b>':'(opcional)')+'<br><input class="in" id="gmCm" placeholder="'+(isNo?'¿Por qué no renueva?':'Comentario…')+'" style="width:100%;margin-top:3px" autocomplete="off"></label><div id="gmErr" class="warn" style="min-height:18px;margin-top:6px"></div>'
+   +'<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="b" id="gmNo">Cancelar</button><button type="button" class="b pri" id="gmOk">OK</button></div></div>';
+  document.body.appendChild(ov);
+  const close=cancel=>{ ov.remove(); if(cancel) draw(); }, fcI=ov.querySelector('#gmFc'), cmI=ov.querySelector('#gmCm'), er=ov.querySelector('#gmErr');
+  const ok=()=>{ const tx=cmI.value.trim();
+    if(isNo&&!tx){ er.textContent='Escribe un comentario para poder guardar.'; cmI.focus(); return; }
+    if(!isNo&&!fcI.value){ er.textContent='Pon la fecha compromiso para poder guardar.'; fcI.focus(); return; }
+    const mm=marks[id]=marks[id]||{};
+    if(isNo){ mm.g='no'; mm.no=true; mm.mot=v.slice(3); delete mm.fc; } else { mm.g=v; mm.no=false; delete mm.mot; mm.fc=fcI.value; }
+    if(tx) (mm.com=mm.com||[]).push({d:today(),x:tx});
+    mm.ts=Date.now(); view.flash=id; save(); close(false); draw(); };
+  ov.querySelector('#gmOk').onclick=ok; ov.querySelector('#gmNo').onclick=()=>close(true);
+  ov.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); ok(); } else if(e.key==='Escape'){ close(true); } });
+  ov.addEventListener('click',e=>{ if(e.target===ov) close(true); });
+  setTimeout(()=>(fcI&&!fcI.value?fcI:cmI).focus(),30);
 }
 function copyList(){
   const A=analyze(view.month), q=norm(view.q);
-  const L=(view.filter==='arr'?A.arr:view.filter==='leg'?A.leg:A.items).filter(i=>(view.filter==='arr'||view.filter==='leg'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q))).sort((a,b)=>a.suc.localeCompare(b.suc)||a.as.localeCompare(b.as)||(a.fin||'').localeCompare(b.fin||''));
+  const L=(view.filter==='arr'?A.arr:view.filter==='leg'?A.leg:A.items).filter(i=>(view.filter==='arr'||view.filter==='leg'||hit(i,view.filter))&&(!view.suc||i.suc===view.suc)&&(!view.as||i.as===view.as)&&(view.filter!=='no'||!view.mot||((marks[i.id]||{}).mot||'')===view.mot)&&(!q||norm(i.cl).includes(q)||i.cid.includes(q)||i.id.includes(q))).sort((a,b)=>a.suc.localeCompare(b.suc)||a.as.localeCompare(b.as)||(a.fin||'').localeCompare(b.fin||''));
   if(!L.length){ view.msg='No hay clientes en esta lista.'; draw(); return; }
   const tit={leg:'En legal',arr:'Arrastre de meses anteriores',seg:'En seguimiento',vis:'Visitas pendientes',por:'Por renovar',pt:'Pendientes',lnr:'Liquidó sin renovar',no:'No renueva',ren:'Renovados',adel:'Renovación adelantada',todos:'Vencimientos'}[view.filter];
   let out='*'+tit+' — '+mname(view.month)+'* ('+L.length+')\n'; let cs=null;
@@ -584,7 +614,7 @@ document.addEventListener('click',e=>{
   const gm=t.closest('[data-gm]'); if(gm){ e.preventDefault(); view.month=gm.dataset.gm; draw(); $('#rnvPanel').scrollTop=0; return; }
   const f=t.closest('[data-f]'); if(f){ view.filter=f.dataset.f; draw(); return; }
   const no=t.closest('[data-no]'); if(no){ const id=no.dataset.no, m=marks[id]=marks[id]||{}; if(!m.no&&!m.mot){ view.msg='Primero elige el motivo.'; } else m.no=!m.no; save(); draw(); return; }
-  const cb=t.closest('[data-cmb]'); if(cb){ const id=cb.dataset.cmb, inp=document.querySelector('[data-cm="'+id+'"]'), x=inp&&inp.value.trim(); if(x){ const m=marks[id]=marks[id]||{}; (m.com=m.com||[]).push({d:today(),x}); save(); draw(); } return; }
+  const cb=t.closest('[data-cmb]'); if(cb){ const id=cb.dataset.cmb, inp=document.querySelector('[data-cm="'+id+'"]'), x=inp&&inp.value.trim(); if(x){ const m=marks[id]=marks[id]||{}; (m.com=m.com||[]).push({d:today(),x}); m.ts=Date.now(); view.flash=id; save(); draw(); } return; }
   if(t.closest('[data-stop]')) return;
   const row=t.closest('[data-row]'); if(row){ view.open=view.open===row.dataset.row?null:row.dataset.row; draw(); }
 });
@@ -593,8 +623,9 @@ document.addEventListener('change',e=>{ const t=e.target; if(!t.closest('#rnvPan
   else if(t.dataset.a==='suc'){ view.suc=t.value; view.as=''; draw(); }
   else if(t.dataset.a==='adv'){ cfg.adv=Math.max(0,+t.value||0); save(); draw(); }
   else if(t.dataset.comp!=null){ const c=comp[view.month]=comp[view.month]||{}; if(t.value==='') delete c[t.dataset.comp]; else { const sx=analyze(view.month).sucs[t.dataset.comp]; c[t.dataset.comp]=Math.max(0,Math.min(+t.value||0,sx?sx.por:+t.value)); } save(); draw(); }
-  else if(t.dataset.g!=null){ const m=marks[t.dataset.g]=marks[t.dataset.g]||{}, v=t.value; if(v===''){ delete m.g; delete m.mot; m.no=false; } else if(v.indexOf('no|')===0){ m.g='no'; m.no=true; m.mot=v.slice(3); } else { m.g=v; m.no=false; delete m.mot; } save(); draw(); }
-  else if(t.dataset.fc!=null){ const m=marks[t.dataset.fc]=marks[t.dataset.fc]||{}; if(t.value) m.fc=t.value; else delete m.fc; save(); draw(); } });
+  else if(t.dataset.a==='mot'){ view.mot=t.value; draw(); }
+  else if(t.dataset.g!=null){ const id=t.dataset.g, v=t.value; if(v===''){ const m=marks[id]=marks[id]||{}; delete m.g; delete m.mot; m.no=false; save(); draw(); } else askGest(id,v); }
+  else if(t.dataset.fc!=null){ const m=marks[t.dataset.fc]=marks[t.dataset.fc]||{}; if(t.value) m.fc=t.value; else delete m.fc; m.ts=Date.now(); view.flash=t.dataset.fc; save(); draw(); } });
 document.addEventListener('input',e=>{ const t=e.target; if(t.dataset&&t.dataset.a==='q'&&t.closest('#rnvPanel')){ view.q=t.value; const p=t.selectionStart; draw(); const n=document.querySelector('[data-a="q"]'); if(n){n.focus(); try{n.setSelectionRange(p,p);}catch(_){}} } });
 $('#rnvFile').addEventListener('change',e=>{ const f=e.target.files[0]; e.target.value=''; if(f) onFile(f); });
 idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().slice(0,7); view.month=m.includes(mes)?mes:(m[m.length-1]||mes); } }).catch(()=>{});
@@ -684,7 +715,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.22.1 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.23.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2792,7 +2823,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.22.1';
+  const APP_VERSION = 'v2.23.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
