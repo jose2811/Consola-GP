@@ -667,6 +667,12 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="asesoresList"></div>
   </div>
 
+  <details id="hcAdjBox" style="display:none;margin:10px 0;background:#fff;border:1px solid var(--border,#d9dee5);border-radius:12px;padding:10px 14px">
+    <summary style="cursor:pointer;font-weight:700">🛠️ Ajuste rápido de asesores (solo Approvals) <span id="hcAdjCount" style="font-weight:600;color:#7c3aed"></span></summary>
+    <div style="font-size:12px;color:#6b7280;margin:8px 0">Suma o quita asesores "virtuales" por oficina si el gerente no actualizó (incapacidad, alta, etc.). Cada asesor = 3 de cover y 4 de meta. Aplica de hoy en adelante y solo cambia tu consola.</div>
+    <div id="hcAdjList"></div>
+  </details>
+
   <button class="archive-toggle" id="archiveTitle" style="display:none;">📂 Archivo histórico — Desembolsados y Rechazados <span id="archiveToggleChev">▾</span></button>
   <div class="archive-box" id="archiveBox" style="display:none;">
     <div class="archive-filters">
@@ -678,7 +684,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.21.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.22.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -887,7 +893,25 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
   }
   function v2DaysInStage(p, today){ const l=v2Last(p); return l ? Math.max(0, dayGap(l.d, today)) : 0; }
   function v2Lvl(p, today){ const L=V2_LIM[v2Stage(p)]; if(!L) return 0; const n=v2DaysInStage(p,today); return n>=L[1]?2:(n>=L[0]?1:0); }
-  function adaptV2(d){
+  // ---- Ajuste rápido de asesores (solo Approvals): suma/resta asesores "virtuales" por sucursal ----
+  // Cada asesor extra = +3 de cover y +4 de meta. Aplica de la fecha en que se puso en adelante.
+  const HCADJ_KEY = 'director:hcAdj';
+  function loadHcAdj(){ try{ return JSON.parse(lsGet(HCADJ_KEY)||'{}'); }catch(e){ return {}; } }
+  function applyHcAdj(o){
+    if(!o || !o.marcadorDias) return o;
+    const a = loadHcAdj()[String(o.sucursal||'').trim().toLowerCase()], n = a ? (a.n||0) : 0, desde = a ? (a.desde||'') : '';
+    Object.keys(o.marcadorDias).forEach(f=>{
+      const p = o.marcadorDias[f] && o.marcadorDias[f].metrics && o.marcadorDias[f].metrics.prospeccion; if(!p) return;
+      if(p.base==null) p.base = p.total||0;
+      const on = n && f>=desde;
+      p.total = p.base + (on ? n*3 : 0);
+      p.totalMeta = Math.round(p.base/3*4) + (on ? n*4 : 0);
+      p.ajuste = on ? n : 0;
+    });
+    return o;
+  }
+  function adaptV2(d){ return applyHcAdj(adaptV2Raw(d)); }
+  function adaptV2Raw(d){
     if(!d || d.formato!=='agenda-gerente-v2' || d._adapted) return d;
     const o = {...d, _adapted:true, v2:true, region: d.region || 'Jalisco'};
     const hoy = d.exportedAt ? toDateStr(new Date(d.exportedAt)) : todayStr();
@@ -2691,6 +2715,24 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     if(asesoresOpen) renderAsesoresSection();
   });
 
+  function renderHcAdj(){
+    const adj = loadHcAdj(), keys = Object.keys(branches).sort(), box = $('#hcAdjBox');
+    box.style.display = keys.length ? '' : 'none';
+    const act = keys.filter(k=>adj[k] && adj[k].n).length;
+    $('#hcAdjCount').textContent = act ? '· '+act+' activo(s)' : '';
+    $('#hcAdjList').innerHTML = keys.map(k=>{ const n=(adj[k]&&adj[k].n)||0, nm=(branches[k].sucursal||k);
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #eef0f3"><span style="flex:1">'+nm+'</span><button type="button" class="btn" data-hcadj="'+k+'" data-d="-1">−</button><b style="min-width:32px;text-align:center;color:'+(n?'#7c3aed':'inherit')+'">'+(n>0?'+':'')+n+'</b><button type="button" class="btn" data-hcadj="'+k+'" data-d="1">+</button></div>'; }).join('');
+  }
+  document.addEventListener('click', e=>{
+    const b = e.target.closest && e.target.closest('[data-hcadj]'); if(!b) return;
+    const k = b.dataset.hcadj, adj = loadHcAdj(), cur = adj[k] ? (adj[k].n||0) : 0, n = Math.max(-6, Math.min(6, cur + (+b.dataset.d)));
+    if(n===0) delete adj[k]; else adj[k] = {n, desde: (adj[k]&&adj[k].desde) || todayStr()};
+    lsSet(HCADJ_KEY, JSON.stringify(adj));
+    Object.keys(branches).forEach(x=>applyHcAdj(branches[x]));
+    Object.keys(cortesHoyPorSucursal).forEach(x=>(cortesHoyPorSucursal[x]||[]).forEach(applyHcAdj));
+    saveBranches(branches); saveCortesHoy(cortesHoyPorSucursal); render();
+    $('#hcAdjBox').open = true;
+  });
   function render(){
     const n = Object.keys(branches).length;
     $('#statusText').innerHTML = `<b>${n}</b> sucursal(es) cargada(s)`;
@@ -2702,6 +2744,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     // (se reacomodaron en la pantalla), así que controlan su propio show/hide
     // con la misma condición de siempre: solo si ya hay algo cargado.
     $('#totalGeneral').style.display = n ? '' : 'none';
+    renderHcAdj();
     $('#dirRow').style.display = n ? '' : 'none'; document.querySelector('.dir-cap').style.display = n ? '' : 'none';
     if(n){
       renderTotalGeneral();
@@ -2749,7 +2792,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.21.0';
+  const APP_VERSION = 'v2.22.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
