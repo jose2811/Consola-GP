@@ -669,7 +669,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
 
   <details id="hcAdjBox" style="display:none;margin:10px 0;background:#fff;border:1px solid var(--border,#d9dee5);border-radius:12px;padding:10px 14px">
     <summary style="cursor:pointer;font-weight:700">🛠️ Ajuste rápido de asesores (solo Approvals) <span id="hcAdjCount" style="font-weight:600;color:#7c3aed"></span></summary>
-    <div style="font-size:12px;color:#6b7280;margin:8px 0">Suma o quita asesores "virtuales" por oficina si el gerente no actualizó (incapacidad, alta, etc.). Cada asesor = 3 de cover y 4 de meta. Aplica de hoy en adelante y solo cambia tu consola.</div>
+    <div style="font-size:12px;color:#6b7280;margin:8px 0">Suma o quita asesores "virtuales" por oficina si el gerente no actualizó (incapacidad, alta, etc.). Cada asesor = 3 en la meta de Approvals. Aplica de hoy en adelante y solo cambia tu consola.</div>
     <div id="hcAdjList"></div>
   </details>
 
@@ -684,7 +684,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.22.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.22.1 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -894,7 +894,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
   function v2DaysInStage(p, today){ const l=v2Last(p); return l ? Math.max(0, dayGap(l.d, today)) : 0; }
   function v2Lvl(p, today){ const L=V2_LIM[v2Stage(p)]; if(!L) return 0; const n=v2DaysInStage(p,today); return n>=L[1]?2:(n>=L[0]?1:0); }
   // ---- Ajuste rápido de asesores (solo Approvals): suma/resta asesores "virtuales" por sucursal ----
-  // Cada asesor extra = +3 de cover y +4 de meta. Aplica de la fecha en que se puso en adelante.
+  // Cada asesor extra = +3 en la meta de Approvals. Aplica de la fecha en que se puso en adelante.
   const HCADJ_KEY = 'director:hcAdj';
   function loadHcAdj(){ try{ return JSON.parse(lsGet(HCADJ_KEY)||'{}'); }catch(e){ return {}; } }
   function applyHcAdj(o){
@@ -905,7 +905,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       if(p.base==null) p.base = p.total||0;
       const on = n && f>=desde;
       p.total = p.base + (on ? n*3 : 0);
-      p.totalMeta = Math.round(p.base/3*4) + (on ? n*4 : 0);
+      p.totalMeta = p.base + (on ? n*3 : 0); // la meta es 3 por asesor (el cover ya no se usa)
       p.ajuste = on ? n : 0;
     });
     return o;
@@ -2489,7 +2489,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       // la meta de esa sucursal es menor a lo que su plantilla total sugiere.
       const ausentes = (Array.isArray(data.asesores) ? data.asesores : []).filter(a=>a.activo!==false && a.ausencia);
       const ausentesHTML = ausentes.length
-        ? `<div class="branch-ausentes">${ausentes.map(a=>`${a.ausencia==='vacaciones'?'🏖':'📤'} ${escapeHTML(a.name)} · ${a.ausencia==='vacaciones'?'vacaciones':'baja programada'}`).join(' &nbsp;·&nbsp; ')} <span class="ba-note">(fuera de la meta)</span></div>`
+        ? `<div class="branch-ausentes">${ausentes.map(a=>`${a.ausencia==='vacaciones'?'🏖':a.ausencia==='incapacidad'?'🏥':'📤'} ${escapeHTML(a.name)} · ${a.ausencia==='vacaciones'?'vacaciones':a.ausencia==='incapacidad'?'incapacidad':'baja programada'}${a.regreso?' (regresa '+a.regreso.slice(8,10)+'/'+a.regreso.slice(5,7)+')':''}`).join(' &nbsp;·&nbsp; ')} <span class="ba-note">(fuera de la meta)</span></div>`
         : '';
       let otrosHTML = '';
       if(dia && dia.otros){
@@ -2792,7 +2792,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.22.0';
+  const APP_VERSION = 'v2.22.1';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
