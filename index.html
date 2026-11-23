@@ -269,12 +269,18 @@
   .aseso-suc{margin-bottom:14px;}
   .aseso-suc:last-child{margin-bottom:0;}
   .aseso-suc-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--ink);padding:4px 0 6px;border-bottom:1px solid var(--line);margin-bottom:6px;}
+  .aseso-resumen{border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin-bottom:12px;background:#fff;}
+  .aseso-res-row{display:grid;grid-template-columns:1.3fr .5fr .5fr 1.6fr;gap:6px;align-items:baseline;font-size:12px;padding:4px 0;border-bottom:1px solid var(--line);}
+  .aseso-res-row:last-child{border-bottom:0;}
+  .aseso-res-row.head{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700;}
+  .aseso-res-row.total{font-weight:800;border-top:2px solid var(--ink);}
+  .aseso-res-row .ok{color:#1f7a4f;font-weight:700;} .aseso-res-row .no{color:var(--muted);} .aseso-res-row small{font-size:10.5px;}
   .aseso-suc-count{font-weight:700;color:var(--muted);font-size:11px;}
-  .aseso-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;font-size:12.5px;border-bottom:1px dashed var(--line);}
+  .aseso-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 8px;padding:5px 0;font-size:12.5px;border-bottom:1px dashed var(--line);}
   .aseso-row:last-child{border-bottom:none;}
   .aseso-row.inactive{opacity:.55;}
-  .aseso-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .aseso-meta-group{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+  .aseso-name{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:90px;max-width:100%;}
+  .aseso-meta-group{display:flex;flex-wrap:wrap;align-items:center;gap:4px 9px;}
   .aseso-meta{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0;}
   .aseso-meta.baja{color:var(--danger);font-weight:700;}
   .aseso-meta.ausente{color:var(--warn);font-weight:700;}
@@ -761,7 +767,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.24.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.25.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -817,7 +823,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     if(!Array.isArray(data.asesores)) return 0;
     const n = data.asesores.filter(raw=>{
       const a = effectiveAsesor(data, raw);
-      if(a.activo===false || a.ausencia) return false;
+      if(a.activo===false || a.ausencia || a.gestor) return false;
       if(!a.fechaAlta) return true;
       const d = antiguedadDiasConsola(a.fechaAlta, mondayStr);
       return d===null || d>=ANTIGUEDAD_MIN_DIAS;
@@ -2192,6 +2198,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
   // solo se usa mientras el gerente no haya puesto su propio dato; si el gerente
   // después captura el suyo, ese manda (es la fuente verdadera).
   function asesorKeyOf(a){ return a.id || a.name; }
+  function addMonthsStr(s,n){ const d=new Date(s+'T00:00:00'), dd=d.getDate(); d.setMonth(d.getMonth()+n); if(d.getDate()!==dd) d.setDate(0); return toDateStr(d); }
   function effectiveAsesor(data, a){
     const ov = (data.overrides && data.overrides[asesorKeyOf(a)]) || {};
     return {
@@ -2232,7 +2239,27 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       wrap.innerHTML = `<div class="aseso-empty">Todavía no cargas ninguna sucursal.</div>`;
       return;
     }
-    wrap.innerHTML = entries.map(([sucursal, data])=>{
+    // Mini resumen: una línea por oficina (plantilla total · cuentan para meta · no aplican)
+    const mon = mondayOf(today);
+    const resumen = entries.map(([sucursal, data])=>{
+      const act = (Array.isArray(data.asesores) ? data.asesores : []).map(r=>effectiveAsesor(data, r)).filter(a=>a.activo!==false);
+      const r = {nombre:data.sucursal||sucursal, total:act.length, cuentan:0, gest:0, aus:0, nuevos:0, known:Array.isArray(data.asesores)};
+      act.forEach(a=>{
+        if(a.gestor){ r.gest++; return; }
+        if(a.ausencia){ r.aus++; return; }
+        if(a.fechaAlta){ const d = antiguedadDiasConsola(a.fechaAlta, mon); if(d!==null && d<ANTIGUEDAD_MIN_DIAS){ r.nuevos++; return; } }
+        r.cuentan++;
+      });
+      return r;
+    });
+    const sum = k => resumen.reduce((t,r)=>t+r[k],0);
+    const why = r => [r.aus?`${r.aus} ausente(s)`:'', r.gest?`${r.gest} gestor`:'', r.nuevos?`${r.nuevos} nuevo(s)`:''].filter(Boolean).join(' · ');
+    const resumenHTML = `<div class="aseso-resumen">
+      <div class="aseso-res-row head"><span>Oficina</span><span title="Asesores activos (plantilla)">Total</span><span title="Cuentan para la meta de esta semana">Meta</span><span title="No aplican meta">No aplica</span></div>
+      ${resumen.map(r=>`<div class="aseso-res-row"><span>${escapeHTML(r.nombre)}</span><span>${r.known?r.total:'—'}</span><span class="ok">${r.known?r.cuentan:'—'}</span><span class="no" title="${escapeHTML(why(r))}">${r.known?(r.total-r.cuentan):'—'}${r.known&&r.total-r.cuentan?` <small>· ${escapeHTML(why(r))}</small>`:''}</span></div>`).join('')}
+      <div class="aseso-res-row total"><span>Región</span><span>${sum('total')}</span><span class="ok">${sum('cuentan')}</span><span class="no">${sum('total')-sum('cuentan')}</span></div>
+    </div>`;
+    wrap.innerHTML = resumenHTML + entries.map(([sucursal, data])=>{
       const lista = Array.isArray(data.asesores) ? [...data.asesores].sort((x,y)=>{
         if((x.activo!==false)!==(y.activo!==false)) return x.activo!==false ? -1 : 1;
         return (x.name||'').localeCompare(y.name||'');
@@ -2261,7 +2288,10 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         const key = asesorKeyOf(raw);
         const metaBits = [];
         if(a.activo!==false && a.ausencia){
-          metaBits.push(`<span class="aseso-meta ausente">${a.ausencia==='vacaciones'?'🏖 vacaciones':'📤 baja programada'}</span>`);
+          metaBits.push(`<span class="aseso-meta ausente">${a.ausencia==='vacaciones'?'🏖 vacaciones':a.ausencia==='incapacidad'?'🏥 incapacidad':a.ausencia==='permiso'?'📝 permiso':'📤 baja programada'}</span>`);
+        }
+        if(a.activo!==false && a.gestor){
+          metaBits.push(`<span class="aseso-meta ausente">🧾 gestor (no cuenta en metas)</span>`);
         }
         if(a.activo===false){
           metaBits.push(`<span class="aseso-meta baja">de baja</span>`);
@@ -2269,6 +2299,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
           metaBits.push(`<span class="aseso-meta">sin fecha de alta</span><button type="button" class="aseso-edit-btn" data-action="edit-alta" data-suc="${escapeHTML(sucursal)}" data-key="${escapeHTML(key)}">📅 poner</button>`);
         } else {
           const dias = antiguedadDiasConsola(a.fechaAlta, today);
+          if(!a.gestor && !a.cert && a.activo!==false && dias!==null && dias>=0 && dias<=120) metaBits.push(`<span class="aseso-meta ausente">🎓 certifica ${fmtDate(addMonthsStr(a.fechaAlta,3))}</span>`);
           metaBits.push(`<span class="aseso-meta${a._altaIsOverride?' override':''}">alta ${fmtDate(a.fechaAlta)} · ${dias}d${a._altaIsOverride?' (tú)':''}</span><button type="button" class="aseso-edit-btn" data-action="edit-alta" data-suc="${escapeHTML(sucursal)}" data-key="${escapeHTML(key)}">✏️</button>`);
         }
         // El cumpleaños es independiente de la fecha de alta — si la capturaron,
@@ -2388,6 +2419,13 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
             const oc = proximaOcurrencia(a.fechaAlta, hoyStr);
             if(oc && oc.anios>=1 && oc.diasFaltan<=RECORDATORIO_DIAS_ANTES) eventos.push({tipo:'aniversario', nombre:a.name, sucursal:nombreSuc, ...oc});
           }
+          // Certificación: 3 meses desde el ingreso. Se muestra desde ~mes y medio antes
+          // y hasta 30 días después si nadie la marcó como lograda.
+          if(a.fechaAlta && !a.gestor && !a.cert){
+            const dd = new Date(a.fechaAlta+'T00:00:00'), dom = dd.getDate(); dd.setMonth(dd.getMonth()+3); if(dd.getDate()!==dom) dd.setDate(0);
+            const cert = toDateStr(dd), faltan = Math.round((dd - new Date(hoyStr+'T00:00:00'))/864e5);
+            if(faltan<=46 && faltan>=-30 && antiguedadDiasConsola(a.fechaAlta, hoyStr)>=0) eventos.push({tipo:'cert', nombre:a.name, sucursal:nombreSuc, diasFaltan:faltan, cert});
+          }
         });
       }
       // El gerente de la sucursal — su fecha de ingreso/cumpleaños solo existe si
@@ -2416,6 +2454,10 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     banner.innerHTML = eventos.map(e=>{
       const cuando = e.diasFaltan===0 ? 'hoy' : (e.diasFaltan===1 ? 'mañana' : `en ${e.diasFaltan} días`);
       const etiqueta = e.rol==='gerente' ? `gerente, ${e.sucursal}` : e.sucursal;
+      if(e.tipo==='cert'){
+        const txt = e.diasFaltan>0 ? `se certifica en <b>${e.diasFaltan} día(s)</b> (${fmtDate(e.cert)})` : e.diasFaltan===0 ? 'debe certificarse <b>hoy</b>' : `<b>debió certificarse hace ${-e.diasFaltan} día(s)</b> (${fmtDate(e.cert)}) — confirma con el gerente`;
+        return `<span class="tdb-row">🎓 <b>${escapeHTML(e.nombre)}</b> (${escapeHTML(e.sucursal)}) ${txt}.</span>`;
+      }
       if(e.tipo==='cumple'){
         return `<span class="tdb-row">🎂 <b>${escapeHTML(e.nombre)}</b> (${escapeHTML(etiqueta)}) cumple años ${cuando}.</span>`;
       }
@@ -2566,7 +2608,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       // la meta de esa sucursal es menor a lo que su plantilla total sugiere.
       const ausentes = (Array.isArray(data.asesores) ? data.asesores : []).filter(a=>a.activo!==false && a.ausencia);
       const ausentesHTML = ausentes.length
-        ? `<div class="branch-ausentes">${ausentes.map(a=>`${a.ausencia==='vacaciones'?'🏖':a.ausencia==='incapacidad'?'🏥':'📤'} ${escapeHTML(a.name)} · ${a.ausencia==='vacaciones'?'vacaciones':a.ausencia==='incapacidad'?'incapacidad':'baja programada'}${a.regreso?' (regresa '+a.regreso.slice(8,10)+'/'+a.regreso.slice(5,7)+')':''}`).join(' &nbsp;·&nbsp; ')} <span class="ba-note">(fuera de la meta)</span></div>`
+        ? `<div class="branch-ausentes">${ausentes.map(a=>`${a.ausencia==='vacaciones'?'🏖':a.ausencia==='incapacidad'?'🏥':a.ausencia==='permiso'?'📝':'📤'} ${escapeHTML(a.name)} · ${a.ausencia==='vacaciones'?'vacaciones':a.ausencia==='incapacidad'?'incapacidad':a.ausencia==='permiso'?'permiso':'baja programada'}${a.regreso?' (regresa '+a.regreso.slice(8,10)+'/'+a.regreso.slice(5,7)+')':''}`).join(' &nbsp;·&nbsp; ')} <span class="ba-note">(fuera de la meta)</span></div>`
         : '';
       let otrosHTML = '';
       if(dia && dia.otros){
@@ -2869,7 +2911,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.24.0';
+  const APP_VERSION = 'v2.25.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
