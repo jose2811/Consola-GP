@@ -756,6 +756,12 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="hcAdjList"></div>
   </details>
 
+  <details id="manualBox" style="display:none;margin:10px 0;background:#fff;border:1px solid var(--border,#d9dee5);border-radius:12px;padding:10px 14px">
+    <summary style="cursor:pointer;font-weight:700">✍️ Captura manual de totales <span id="manualCount" style="font-weight:600;color:#7c3aed"></span></summary>
+    <div style="font-size:12px;color:#6b7280;margin:8px 0">Si un gerente no pudo mandar su agenda: marca su oficina como <b>ignorar</b> (deja de sumar en los totales) y anota abajo los números que sí deben contar. Lo que captures se suma al concentrado de las demás oficinas. Cuando el gerente vuelva a mandar, quita la marca de ignorar y borra tu captura de ese día.</div>
+    <div id="manualForm"></div>
+  </details>
+
   <button class="archive-toggle" id="archiveTitle" style="display:none;">📂 Archivo histórico — Desembolsados y Rechazados <span id="archiveToggleChev">▾</span></button>
   <div class="archive-box" id="archiveBox" style="display:none;">
     <div class="archive-filters">
@@ -767,7 +773,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.25.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.26.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -912,6 +918,37 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     const prev = branches[key];
     if(prev) DIRECTOR_ONLY_FIELDS.forEach(f=>{ if(prev[f] && !incoming[f]) incoming[f] = prev[f]; });
     branches[key] = incoming;
+  }
+  // ---- Captura manual del director + oficinas ignoradas en los totales ----
+  // Cuando un gerente no puede mandar su agenda: marcas esa oficina como "ignorar" (no suma en los
+  // totales) y anotas aquí los números que sí deben contar. Todo vive solo en tu consola.
+  const MANTOT_KEY = 'director:manualTot', IGN_KEY = 'director:ignorar';
+  const MAN_FIELDS = [
+    ['fichas','Fichas del día',['real','total']],
+    ['mora17','Mora 1–7 días',['real','total']],
+    ['riesgo','Riesgo de brinco ($)',['real']],
+    ['desembolso','Desembolso ($)',['real','compromiso']],
+    ['prospeccion','Approvals',['real','total']],
+    ['mora8mas','Mora 8–60 días ($)',['real','compromiso']],
+  ];
+  function loadManualTot(){ try{ return JSON.parse(lsGet(MANTOT_KEY)||'{}'); }catch(e){ return {}; } }
+  function loadIgnorar(){ try{ return JSON.parse(lsGet(IGN_KEY)||'{}'); }catch(e){ return {}; } }
+  function manualBranch(){
+    const man = loadManualTot(), o = {sucursal:'✍️ Captura manual', gerente:'', asesores:[], crecimiento:[], marcadorDias:{}, metasSemanales:{}, _manualBranch:true};
+    Object.keys(man).forEach(f=>{
+      if(f==='_metas'){ Object.keys(man._metas||{}).forEach(m=>{ if(man._metas[m]>0) o.metasSemanales[m] = {meta:man._metas[m]}; }); return; }
+      const metrics = {};
+      MAN_FIELDS.forEach(([k])=>{ const v = man[f][k]; if(!v) return; metrics[k] = {...v}; if(k==='prospeccion') metrics[k].totalMeta = v.total||0; });
+      if(Object.keys(metrics).length) o.marcadorDias[f] = {metrics};
+    });
+    const t = todayStr(); if(Object.keys(o.marcadorDias).length || Object.keys(o.metasSemanales).length){ if(!o.marcadorDias[t]) o.marcadorDias[t] = {metrics:{}}; return o; }
+    return null;
+  }
+  // Lo que cuenta para los TOTALES: oficinas no ignoradas + la captura manual.
+  function totalesBranches(){
+    const ign = loadIgnorar(), out = Object.entries(branches).filter(([k])=>!ign[k]).map(([,d])=>d), mb = manualBranch();
+    if(mb) out.push(mb);
+    return out;
   }
   function loadBranches(){ try{ return JSON.parse(lsGet(BRANCHES_KEY)||'{}'); }catch(e){ return {}; } }
   function saveBranches(b){ lsSet(BRANCHES_KEY, JSON.stringify(b)); touchLastModified(); }
@@ -1326,7 +1363,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     const monToday = mondayOf(today);
     const weekDatesToday = weekDatesUpTo(today);
     let metaGeneral = 0, realAcumGeneral = 0, nBranchesConMeta = 0;
-    Object.values(branches).forEach(data=>{
+    totalesBranches().forEach(data=>{
       const dateKey = data.marcadorDias && data.marcadorDias[today] ? today : latestMarcadorDate(data);
       const dia = dateKey ? data.marcadorDias[dateKey] : null;
       if(dia && dia.metrics){
@@ -1498,7 +1535,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     let nBranches = 0, nStale = 0;
     let aMesa = {real:0, proy:0}, mora860 = {real:0, comp:0}, rezag = 0;
 
-    Object.values(branches).forEach(data=>{
+    totalesBranches().forEach(data=>{
       const dateKey = data.marcadorDias && data.marcadorDias[today] ? today : latestMarcadorDate(data);
       if(!dateKey) return;
       nBranches++;
@@ -1546,7 +1583,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     const A = {fi:{r:0,t:0}, ap:{r:0,t:0}, m8:{r:0,c:0}, rg:{r:0,c:0}, dN:0, dC:0, dR:0, dRN:0, mR:0, mRN:0, mP:0, mPN:0};
     const F = {en_mesa:{count:0,monto:0}, por_enviar:{count:0,monto:0}, por_firmar:{count:0,monto:0}, rechazado:{count:0,monto:0}};
     let nStale = 0;
-    Object.values(branches).forEach(data=>{
+    totalesBranches().forEach(data=>{
       const dateKey = data.marcadorDias && data.marcadorDias[today] ? today : latestMarcadorDate(data);
       if(!dateKey) return;
       if(dateKey!==today) nStale++;
@@ -1798,7 +1835,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     const dates = weekDatesUpTo(today);
     const dailyHTML = dates.map(d=>{
       let total = 0;
-      Object.values(branches).forEach(data=>{
+      totalesBranches().forEach(data=>{
         const dia = data.marcadorDias && data.marcadorDias[d];
         if(dia && dia.metrics && dia.metrics.desembolso) total += (dia.metrics.desembolso.real||0);
       });
@@ -1813,7 +1850,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     // para ver el desglose por oficina — nomás que suma todos los días, no uno solo.
     let weekTotal = 0;
     dates.forEach(d=>{
-      Object.values(branches).forEach(data=>{
+      totalesBranches().forEach(data=>{
         const dia = data.marcadorDias && data.marcadorDias[d];
         if(dia && dia.metrics && dia.metrics.desembolso) weekTotal += (dia.metrics.desembolso.real||0);
       });
@@ -2674,7 +2711,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         <div class="branch-head" data-action="toggle-branch" role="button" tabindex="0">
           <span class="branch-chev">${openBranch===sucursal?'▾':'▸'}</span>
           <span class="branch-name">${escapeHTML(data.sucursal || sucursal)}</span>
-          <span class="branch-meta">${escapeHTML(data.gerente||'')} · recibido ${exportedStr}</span>
+          <span class="branch-meta">${escapeHTML(data.gerente||'')} · recibido ${exportedStr}${loadIgnorar()[sucursal]?' · 🚫 ignorada en totales':''}</span>
           <button class="branch-del" data-action="del-branch" title="Quitar esta sucursal">&#10005;</button>
         </div>
         ${headSummaryHTML(data, dia, isStaleReport)}
@@ -2852,6 +2889,53 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     saveBranches(branches); saveCortesHoy(cortesHoyPorSucursal); render();
     $('#hcAdjBox').open = true;
   });
+  let manFecha = '';
+  function renderManual(){
+    const keys = Object.keys(branches).sort(), box = $('#manualBox');
+    box.style.display = keys.length ? '' : 'none'; if(!keys.length) return;
+    if(!manFecha) manFecha = todayStr();
+    const ign = loadIgnorar(), man = loadManualTot(), cur = man[manFecha] || {}, mon = mondayOf(manFecha);
+    const nIgn = keys.filter(k=>ign[k]).length, nMan = Object.keys(man).filter(f=>f!=='_metas').length;
+    $('#manualCount').textContent = (nIgn||nMan) ? '· '+(nIgn?nIgn+' ignorada(s)':'')+(nIgn&&nMan?' · ':'')+(nMan?nMan+' día(s) capturado(s)':'') : '';
+    const inp = (id,v,ph) => `<input type="text" inputmode="numeric" id="${id}" value="${v?v:''}" placeholder="${ph}" style="width:92px;padding:6px;border:1px solid #cfd5dc;border-radius:8px;text-align:right">`;
+    const rows = MAN_FIELDS.map(([k,label,fs])=>{ const c = cur[k]||{};
+      return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid #eef0f3"><span style="flex:1;font-size:13px">${label}</span>${fs.map(f=>inp('man-'+k+'-'+f, c[f]||'', f)).join('')}</div>`; }).join('');
+    const meta = (man._metas && man._metas[mon]) || '';
+    $('#manualForm').innerHTML = `
+      <div style="font-weight:700;font-size:13px;margin:4px 0">1) Oficinas que NO se suman en los totales</div>
+      ${keys.map(k=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px"><input type="checkbox" data-ign="${escapeHTML(k)}" ${ign[k]?'checked':''}> ${escapeHTML(branches[k].sucursal||k)} <span style="color:#6b7280;font-size:11px">${escapeHTML(branches[k].gerente||'')}</span></label>`).join('')}
+      <div style="font-weight:700;font-size:13px;margin:12px 0 4px">2) Números que sí deben contar</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+        <input type="date" id="manFecha" value="${manFecha}" style="padding:7px;border:1px solid #cfd5dc;border-radius:8px">
+        <select id="manPre" style="flex:1;min-width:130px;padding:7px;border:1px solid #cfd5dc;border-radius:8px"><option value="">Precargar de una oficina…</option>${keys.map(k=>`<option value="${escapeHTML(k)}">${escapeHTML(branches[k].sucursal||k)}</option>`).join('')}</select>
+      </div>
+      ${rows}
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid #eef0f3"><span style="flex:1;font-size:13px">Meta de desembolso de la semana ($)</span>${inp('man-meta', meta, 'meta')}</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">${man[manFecha]?'<button type="button" class="btn" id="manBorrar">Borrar este día</button>':''}<button type="button" class="btn" id="manGuardar" style="background:#7c3aed;color:#fff">Guardar captura</button></div>`;
+  }
+  document.addEventListener('change', e=>{
+    const t = e.target;
+    if(t.dataset && t.dataset.ign!==undefined){ const ign = loadIgnorar(); if(t.checked) ign[t.dataset.ign] = true; else delete ign[t.dataset.ign]; lsSet(IGN_KEY, JSON.stringify(ign)); touchLastModified(); render(); $('#manualBox').open = true; return; }
+    if(t.id==='manFecha'){ manFecha = t.value || todayStr(); renderManual(); return; }
+    if(t.id==='manPre' && t.value){
+      const b = branches[t.value], dia = b && b.marcadorDias && b.marcadorDias[manFecha], mt = (dia&&dia.metrics)||{};
+      MAN_FIELDS.forEach(([k,,fs])=>fs.forEach(f=>{ const el = $('#man-'+k+'-'+f); if(el) el.value = (mt[k]&&mt[k][f])||''; }));
+      toast('Precargado con lo que tiene la oficina — ajusta y guarda');
+    }
+  });
+  document.addEventListener('click', e=>{
+    const t = e.target;
+    if(t.id==='manGuardar'){
+      const num = id => { const el = $(id); const v = String((el&&el.value)||'').replace(/[^\d.-]/g,''); return v===''?0:Math.max(0,Number(v)); };
+      const man = loadManualTot(), day = {};
+      MAN_FIELDS.forEach(([k,,fs])=>{ const o = {}; let any = false; fs.forEach(f=>{ o[f] = num('#man-'+k+'-'+f); if(o[f]) any = true; }); if(any) day[k] = o; });
+      if(Object.keys(day).length) man[manFecha] = day; else delete man[manFecha];
+      const mon = mondayOf(manFecha), mm = num('#man-meta'); man._metas = man._metas || {}; if(mm) man._metas[mon] = mm; else delete man._metas[mon];
+      if(!Object.keys(man._metas).length) delete man._metas;
+      lsSet(MANTOT_KEY, JSON.stringify(man)); touchLastModified(); render(); $('#manualBox').open = true; toast('Captura guardada — ya cuenta en los totales');
+    }
+    if(t.id==='manBorrar'){ const man = loadManualTot(); delete man[manFecha]; lsSet(MANTOT_KEY, JSON.stringify(man)); touchLastModified(); render(); $('#manualBox').open = true; toast('Día borrado'); }
+  });
   function render(){
     const n = Object.keys(branches).length;
     $('#statusText').innerHTML = `<b>${n}</b> sucursal(es) cargada(s)`;
@@ -2863,7 +2947,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     // (se reacomodaron en la pantalla), así que controlan su propio show/hide
     // con la misma condición de siempre: solo si ya hay algo cargado.
     $('#totalGeneral').style.display = n ? '' : 'none';
-    renderHcAdj();
+    renderHcAdj(); renderManual();
     $('#dirRow').style.display = n ? '' : 'none'; document.querySelector('.dir-cap').style.display = n ? '' : 'none';
     if(n){
       renderTotalGeneral();
@@ -2911,7 +2995,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.25.0';
+  const APP_VERSION = 'v2.26.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
