@@ -800,7 +800,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.30.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.31.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1692,8 +1692,8 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     document.body.removeChild(ta); return ok;
   }
   // ---- Excel de pronóstico de desembolsos (formato que pide dirección) ----
-  // Supuesto: todo lo que está Por firmar / En mesa / Por enviar sale el siguiente día hábil, salvo lo
-  // aplazado hoy ("no sube hoy"), que queda sin fecha. Las notas recientes van en una 2ª hoja para revisar.
+  // Fecha: lo ya desembolsado hoy y lo marcado 📌 "se desembolsa hoy" va con fecha de HOY; el resto de
+  // Por firmar / En mesa / Por enviar sale el siguiente día hábil, salvo lo aplazado hoy ("no sube hoy"), que queda sin fecha. Las notas recientes van en una 2ª hoja para revisar.
   function sigHabil(iso){ const d = new Date(iso+'T12:00:00'); do{ d.setDate(d.getDate()+1); }while(d.getDay()===0||d.getDay()===6); return d; }
   function loadXlsx(){ return new Promise((res,rej)=>{ if(window.XLSX) return res(); const sc=document.createElement('script'); sc.src='xlsx.mini.min.js'; sc.onload=()=>res(); sc.onerror=()=>rej(new Error('Abre la consola una vez con internet para cargar el generador de Excel.')); document.head.appendChild(sc); }); }
   async function exportarPronostico(){
@@ -1704,11 +1704,13 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     Object.entries(branches).forEach(([k,data])=>{
       if(ign[k]) return;
       (data.crecimiento||[]).forEach(e=>{
-        const st = ST[e.status]; if(!st || isCrecDone(e)) return;
-        const apl = esAplazadoHoy(e, hoy);
+        const des = e.status==='desembolsado' && e.statusDate===hoy;           // ya desembolsado HOY
+        const st = des ? ['Desembolsado',-1] : ST[e.status]; if(!des && (!st || isCrecDone(e))) return;
+        const apl = !des && esAplazadoHoy(e, hoy);
+        const hoyD = new Date(hoy+'T12:00:00');
         const com = (e.comments||[]).slice().sort((a,b)=>((a.date||'')+(a.time||'')).localeCompare((b.date||'')+(b.time||'')));
         const ult = com.length ? com[com.length-1] : null;
-        rows.push({suc:data.sucursal||k, reg:data.region||'Jalisco', nom:e.name, tipo:TIPO[e.tipo]||e.tipo||'', monto:e.monto||0, fecha:apl?null:man, status:st[0], ord:st[1]});
+        rows.push({suc:data.sucursal||k, reg:data.region||'Jalisco', nom:e.name, tipo:TIPO[e.tipo]||e.tipo||'', monto:e.monto||0, fecha:des?hoyD:apl?null:(e.porDesembolsar?hoyD:man), status:st[0], ord:st[1], hoy:des||(!apl&&!!e.porDesembolsar), des});
         if(apl || (ult && dayGap(ult.date||hoy, hoy)<=3)) notas.push([data.sucursal||k, e.name, apl?st[0]+' — aplazado hoy (sin fecha)':st[0], ult ? (ult.date||'')+' '+(ult.text||'') : '', apl?((e.difs||[]).filter(x=>x.d===hoy).map(x=>x.motivo).filter(Boolean).join('; ')):'']);
       });
     });
@@ -1723,8 +1725,8 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     wn['!cols'] = [{wch:16},{wch:34},{wch:34},{wch:60},{wch:30}];
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Pronóstico'); XLSX.utils.book_append_sheet(wb, wn, 'Revisar notas');
     XLSX.writeFile(wb, 'Pronostico_desembolsos_'+hoy+'.xlsx', {cellDates:true});
-    const tot = rows.reduce((t,r)=>t+r.monto,0);
-    toast('Excel listo: '+rows.length+' expediente(s) · '+fmtMoney(tot));
+    const sum = f => rows.filter(f).reduce((t,r)=>t+r.monto,0), dHoy = sum(r=>r.des), pHoy = sum(r=>r.hoy&&!r.des);
+    toast('Excel listo · HOY al cierre: '+fmtMoney(dHoy+pHoy)+' (ya desembolsado '+fmtMoney(dHoy)+' + marcado 📌 '+fmtMoney(pHoy)+') · el resto va a mañana');
   }
   const btnExcelPron = $('#btnExcelPron'); if(btnExcelPron) btnExcelPron.addEventListener('click', exportarPronostico);
   const btnCopyDaySummary = $('#btnCopyDaySummary');
@@ -3058,7 +3060,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.30.0';
+  const APP_VERSION = 'v2.31.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
