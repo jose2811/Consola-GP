@@ -693,6 +693,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <button class="btn-wa" id="btnCopyDaySummary">📋 Compromiso</button>
     <button class="btn-wa" id="btnCopyCorte">🕑 Corte</button>
     <button class="btn-wa" id="btnCopyCierre">🏁 Cierre</button>
+    <button class="btn-wa" id="btnExcelPron">📊 Excel pronóstico</button>
   </div>
 
   <div class="status-row">
@@ -776,7 +777,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.28.1 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.29.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1667,6 +1668,42 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     let ok=false; try{ ok = document.execCommand('copy'); }catch(e){ ok=false; }
     document.body.removeChild(ta); return ok;
   }
+  // ---- Excel de pronóstico de desembolsos (formato que pide dirección) ----
+  // Supuesto: todo lo que está Por firmar / En mesa / Por enviar sale el siguiente día hábil, salvo lo
+  // aplazado hoy ("no sube hoy"), que queda sin fecha. Las notas recientes van en una 2ª hoja para revisar.
+  function sigHabil(iso){ const d = new Date(iso+'T12:00:00'); do{ d.setDate(d.getDate()+1); }while(d.getDay()===0||d.getDay()===6); return d; }
+  function loadXlsx(){ return new Promise((res,rej)=>{ if(window.XLSX) return res(); const sc=document.createElement('script'); sc.src='xlsx.mini.min.js'; sc.onload=()=>res(); sc.onerror=()=>rej(new Error('Abre la consola una vez con internet para cargar el generador de Excel.')); document.head.appendChild(sc); }); }
+  async function exportarPronostico(){
+    const hoy = todayStr(), man = sigHabil(hoy);
+    const TIPO = {nuevo:'Nuevo', renovar:'Renovación', lnr:'LNR', leaddigital:'Lead digital'};
+    const ST = {por_firmar:['Por firmar',0], analisis:['En mesa',1], promesa_mesa:['Por enviar (sube a mesa)',2]};
+    const ign = loadIgnorar(), rows = [], notas = [];
+    Object.entries(branches).forEach(([k,data])=>{
+      if(ign[k]) return;
+      (data.crecimiento||[]).forEach(e=>{
+        const st = ST[e.status]; if(!st || isCrecDone(e)) return;
+        const apl = esAplazadoHoy(e, hoy);
+        const com = (e.comments||[]).slice().sort((a,b)=>((a.date||'')+(a.time||'')).localeCompare((b.date||'')+(b.time||'')));
+        const ult = com.length ? com[com.length-1] : null;
+        rows.push({suc:data.sucursal||k, reg:data.region||'Jalisco', nom:e.name, tipo:TIPO[e.tipo]||e.tipo||'', monto:e.monto||0, fecha:apl?null:man, status:st[0], ord:st[1]});
+        if(apl || (ult && dayGap(ult.date||hoy, hoy)<=3)) notas.push([data.sucursal||k, e.name, apl?st[0]+' — aplazado hoy (sin fecha)':st[0], ult ? (ult.date||'')+' '+(ult.text||'') : '', apl?((e.difs||[]).filter(x=>x.d===hoy).map(x=>x.motivo).filter(Boolean).join('; ')):'']);
+      });
+    });
+    if(!rows.length){ toast('No hay expedientes por firmar, en mesa o por enviar'); return; }
+    rows.sort((a,b)=>a.suc.localeCompare(b.suc)||a.ord-b.ord||a.nom.localeCompare(b.nom));
+    try{ await loadXlsx(); }catch(err){ toast(err.message); return; }
+    const aoa = [['Nombre prospecto','Sucursal','Región','Tipo de Cliente','Monto','Fecha de desembolso','Status']].concat(rows.map(r=>[r.nom, r.suc, r.reg, r.tipo, r.monto, r.fecha, r.status]));
+    const ws = XLSX.utils.aoa_to_sheet(aoa, {cellDates:true});
+    ws['!cols'] = [{wch:34},{wch:16},{wch:12},{wch:15},{wch:12},{wch:20},{wch:30}];
+    for(let i=1;i<aoa.length;i++){ const m = ws['E'+(i+1)]; if(m) m.z = '"$"#,##0'; const f = ws['F'+(i+1)]; if(f && f.v) f.z = 'dd/mm/yyyy'; }
+    const wn = XLSX.utils.aoa_to_sheet([['Sucursal','Prospecto','Status','Última nota (últimos 3 días)','Motivo de aplazamiento']].concat(notas.length?notas:[['(sin notas recientes)','','','','']]));
+    wn['!cols'] = [{wch:16},{wch:34},{wch:34},{wch:60},{wch:30}];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Pronóstico'); XLSX.utils.book_append_sheet(wb, wn, 'Revisar notas');
+    XLSX.writeFile(wb, 'Pronostico_desembolsos_'+hoy+'.xlsx', {cellDates:true});
+    const tot = rows.reduce((t,r)=>t+r.monto,0);
+    toast('Excel listo: '+rows.length+' expediente(s) · '+fmtMoney(tot));
+  }
+  const btnExcelPron = $('#btnExcelPron'); if(btnExcelPron) btnExcelPron.addEventListener('click', exportarPronostico);
   const btnCopyDaySummary = $('#btnCopyDaySummary');
   const btnCopyCorte = $('#btnCopyCorte');
   if(btnCopyCorte){
@@ -2998,7 +3035,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.28.1';
+  const APP_VERSION = 'v2.29.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
