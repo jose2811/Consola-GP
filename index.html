@@ -403,7 +403,7 @@ if(window.TESTMODE){
 .rnv .cm{background:#f6f7f9;border-radius:8px;padding:5px 8px;margin:4px 0;font-size:12px}
 .rnv .cp{width:62px;text-align:right}
 </style>
-<div class="actrow"><button id="rnvOpen">🔁 Renovaciones</button></div>
+<div class="actrow" style="display:flex;gap:8px"><button id="rnvOpen" style="flex:1;width:auto">🔁 Renovaciones</button><button id="btnExcelPron" style="flex:1;padding:12px;border:0;border-radius:10px;background:#1E5FA8;color:#fff;font-weight:700;font-size:14px;cursor:pointer">📊 Excel pronóstico</button></div>
 <div id="rnvPanel"><div class="rnv" id="rnvRoot"></div></div>
 <input type="file" id="rnvFile" accept=".xlsx,.xls,.csv" style="display:none">
 <input type="file" id="rnvImp" accept=".json,application/json" style="display:none">
@@ -693,7 +693,6 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <button class="btn-wa" id="btnCopyDaySummary">📋 Compromiso</button>
     <button class="btn-wa" id="btnCopyCorte">🕑 Corte</button>
     <button class="btn-wa" id="btnCopyCierre">🏁 Cierre</button>
-    <button class="btn-wa" id="btnExcelPron">📊 Excel pronóstico</button>
   </div>
 
   <div class="status-row">
@@ -777,7 +776,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.29.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.29.1 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -3035,7 +3034,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.29.0';
+  const APP_VERSION = 'v2.29.1';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
