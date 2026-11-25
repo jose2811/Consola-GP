@@ -800,7 +800,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.31.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.32.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1104,6 +1104,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         statusDate: last ? last.d : (pe ? pe.d : hoy),
         originDate: pe ? pe.d : hoy,
         porDesembolsar: !!(p.h && p.h.pin) && !(p.h.de || p.h.re),
+        fechaEst: p.fechaEst||'',
         motivo: p.motivo||'',
         enDate: p.h && p.h.en ? p.h.en.d : null,
         compMesaHoy: lockMes.has(p.id),
@@ -1693,7 +1694,8 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
   }
   // ---- Excel de pronóstico de desembolsos (formato que pide dirección) ----
   // Fecha: lo ya desembolsado hoy y lo marcado 📌 "se desembolsa hoy" va con fecha de HOY; el resto de
-  // Por firmar / En mesa / Por enviar sale el siguiente día hábil, salvo lo aplazado hoy ("no sube hoy"), que queda sin fecha. Las notas recientes van en una 2ª hoja para revisar.
+  // Por firmar / En mesa / Por enviar sale el siguiente día hábil, salvo lo aplazado hoy. Si el gerente puso
+  // una "fecha estimada de desembolso" en el expediente, esa fecha manda. ("no sube hoy"), que queda sin fecha. Las notas recientes van en una 2ª hoja para revisar.
   function sigHabil(iso){ const d = new Date(iso+'T12:00:00'); do{ d.setDate(d.getDate()+1); }while(d.getDay()===0||d.getDay()===6); return d; }
   function loadXlsx(){ return new Promise((res,rej)=>{ if(window.XLSX) return res(); const sc=document.createElement('script'); sc.src='xlsx.mini.min.js'; sc.onload=()=>res(); sc.onerror=()=>rej(new Error('Abre la consola una vez con internet para cargar el generador de Excel.')); document.head.appendChild(sc); }); }
   async function exportarPronostico(){
@@ -1710,7 +1712,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         const hoyD = new Date(hoy+'T12:00:00');
         const com = (e.comments||[]).slice().sort((a,b)=>((a.date||'')+(a.time||'')).localeCompare((b.date||'')+(b.time||'')));
         const ult = com.length ? com[com.length-1] : null;
-        rows.push({suc:data.sucursal||k, reg:data.region||'Jalisco', nom:e.name, tipo:TIPO[e.tipo]||e.tipo||'', monto:e.monto||0, fecha:des?hoyD:apl?null:(e.porDesembolsar?hoyD:man), status:st[0], ord:st[1], hoy:des||(!apl&&!!e.porDesembolsar), des});
+        rows.push({suc:data.sucursal||k, reg:data.region||'Jalisco', nom:e.name, tipo:TIPO[e.tipo]||e.tipo||'', monto:e.monto||0, fecha:des?hoyD:(e.fechaEst&&e.fechaEst>=hoy)?new Date(e.fechaEst+'T12:00:00'):apl?null:(e.porDesembolsar?hoyD:man), status:st[0], ord:st[1], hoy:des||(!apl&&!!e.porDesembolsar&&!(e.fechaEst&&e.fechaEst>hoy)), des});
         if(apl || (ult && dayGap(ult.date||hoy, hoy)<=3)) notas.push([data.sucursal||k, e.name, apl?st[0]+' — aplazado hoy (sin fecha)':st[0], ult ? (ult.date||'')+' '+(ult.text||'') : '', apl?((e.difs||[]).filter(x=>x.d===hoy).map(x=>x.motivo).filter(Boolean).join('; ')):'']);
       });
     });
@@ -3060,7 +3062,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.31.0';
+  const APP_VERSION = 'v2.32.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
