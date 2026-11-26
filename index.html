@@ -802,7 +802,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.34.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.35.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -1732,6 +1732,30 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     const sum = f => rows.filter(f).reduce((t,r)=>t+r.monto,0), dHoy = sum(r=>r.des), pHoy = sum(r=>r.hoy&&!r.des);
     toast('Excel listo · HOY al cierre: '+fmtMoney(dHoy+pHoy)+' (ya desembolsado '+fmtMoney(dHoy)+' + marcado 📌 '+fmtMoney(pHoy)+') · el resto va a mañana');
   }
+  async function exportarPlantilla(){
+    const ents = Object.entries(branches).sort((a,b)=>(a[1].sucursal||a[0]).localeCompare(b[1].sucursal||b[0]));
+    const rows = [], res = [];
+    ents.forEach(([k,data])=>{
+      const suc = data.sucursal||k; let ger = 0, ase = 0;
+      if(data.gerente){ ger = 1; rows.push([suc, data.gerente, 'Gerente', 'Activo', (data.gerenteInfo&&data.gerenteInfo.fechaAlta)||'']); }
+      (Array.isArray(data.asesores)?data.asesores:[]).map(r=>effectiveAsesor(data,r)).filter(a=>a.activo!==false)
+        .sort((x,y)=>(x.name||'').localeCompare(y.name||'')).forEach(a=>{
+          ase++; rows.push([suc, a.name||'', a.gestor?'Gestor':'Asesor', a.ausencia?'Ausente ('+(typeof a.ausencia==='string'?a.ausencia:'permiso/incapacidad')+')':'Activo', a.fechaAlta||'']);
+        });
+      res.push([suc, ger, ase, ger+ase]);
+    });
+    if(!rows.length){ toast('No hay plantilla cargada'); return; }
+    try{ await loadXlsx(); }catch(err){ toast(err.message); return; }
+    const tot = i => res.reduce((t,r)=>t+r[i],0);
+    const wr = XLSX.utils.aoa_to_sheet([['Oficina','Gerentes','Asesores / gestores','Total personas']].concat(res, [['REGIÓN', tot(1), tot(2), tot(3)]]));
+    wr['!cols'] = [{wch:18},{wch:10},{wch:20},{wch:14}];
+    const wp = XLSX.utils.aoa_to_sheet([['Oficina','Nombre','Puesto','Estatus','Fecha de ingreso']].concat(rows));
+    wp['!cols'] = [{wch:16},{wch:38},{wch:10},{wch:22},{wch:16}];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, wr, 'Resumen'); XLSX.utils.book_append_sheet(wb, wp, 'Plantilla');
+    XLSX.writeFile(wb, 'Plantilla_'+todayStr()+'.xlsx');
+    toast('Excel listo · '+tot(3)+' personas en '+res.length+' oficinas');
+  }
+  document.addEventListener('click', e=>{ if(e.target.closest && e.target.closest('[data-action="xl-plantilla"]')) exportarPlantilla(); });
   const btnExcelPron = $('#btnExcelPron'); if(btnExcelPron) btnExcelPron.addEventListener('click', exportarPronostico);
   const btnCopyDaySummary = $('#btnCopyDaySummary');
   const btnCopyCorte = $('#btnCopyCorte');
@@ -2363,7 +2387,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     });
     const sum = k => resumen.reduce((t,r)=>t+r[k],0);
     const why = r => [r.aus?`${r.aus} ausente(s)`:'', r.gest?`${r.gest} gestor`:'', r.nuevos?`${r.nuevos} nuevo(s)`:''].filter(Boolean).join(' · ');
-    const resumenHTML = `<div class="aseso-resumen">
+    const resumenHTML = `<button type="button" class="btn-up" style="margin:0 0 8px 0" data-action="xl-plantilla">📊 Exportar plantilla (Excel)</button><div class="aseso-resumen">
       <div class="aseso-res-row head"><span>Oficina</span><span title="Asesores activos (plantilla)">Total</span><span title="Cuentan para la meta de esta semana">Meta</span><span title="No aplican meta">No aplica</span></div>
       ${resumen.map(r=>`<div class="aseso-res-row"><span>${escapeHTML(r.nombre)}</span><span>${r.known?r.total:'—'}</span><span class="ok">${r.known?r.cuentan:'—'}</span><span class="no" title="${escapeHTML(why(r))}">${r.known?(r.total-r.cuentan):'—'}${r.known&&r.total-r.cuentan?` <small>· ${escapeHTML(why(r))}</small>`:''}</span></div>`).join('')}
       <div class="aseso-res-row total"><span>Región</span><span>${sum('total')}</span><span class="ok">${sum('cuentan')}</span><span class="no">${sum('total')-sum('cuentan')}</span></div>
@@ -3070,7 +3094,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.34.0';
+  const APP_VERSION = 'v2.35.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
