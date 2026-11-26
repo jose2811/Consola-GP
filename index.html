@@ -190,6 +190,8 @@
   @keyframes chevIn{from{transform:rotate(-90deg);}to{transform:none;}}
   @media (prefers-reduced-motion:reduce){.anim,.branch-compromiso-toggle.anim .chev{animation:none;}}
   .branch-card.collapsed .branch-body{display:none;}
+  .btn-up{display:block;margin:2px 0 8px auto;font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;border:1px solid var(--line,#d9d6cc);background:#fff;color:#555;cursor:pointer;}
+  .btn-up.bottom{margin:10px 0 0 auto;}
   .branch-head[data-action="toggle-branch"]{cursor:pointer;}
   .branch-chev{font-size:13px;color:var(--muted,#5b6672);width:14px;}
   .branch-card.collapsed .branch-head{margin-bottom:4px;}
@@ -800,7 +802,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.33.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.34.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2788,6 +2790,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
         </div>
         ${headSummaryHTML(data, dia, isStaleReport)}
         <div class="branch-body ${animKey==='b:'+sucursal?'anim':''}">
+        <button class="btn-up" data-up="1" type="button">⬆ Oficinas</button>
         ${isStaleReport ? `<div class="branch-stale-warn">&#9888; El Marcador más reciente que mandaron es del ${fmtDate(dateKey)}, no de hoy.</div>` : ''}
         ${!dateKey ? `<div class="branch-stale-warn">&#9888; Este reporte no trae ningún día de Marcador capturado.</div>` : ''}
         ${ausentesHTML}
@@ -3067,7 +3070,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.33.0';
+  const APP_VERSION = 'v2.34.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
@@ -3136,6 +3139,13 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
   renderBuzonStatus(); // muestra de inmediato el estado de la última actualización (aunque sea de antes)
   fetchFromBuzon(true); // al abrir la consola, jala lo más nuevo y actualiza el banner de estado (sin toast)
 })();
+
+  document.addEventListener('click', e=>{
+    const b = e.target.closest && e.target.closest('[data-up]');
+    if(!b) return;
+    const t = document.getElementById('lastUpdatedWrap') || document.getElementById('branchesWrap');
+    if(t) t.scrollIntoView({behavior:'smooth', block:'start'});
+  });
 </script>
 </body>
 </html>
