@@ -800,7 +800,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     <div id="archiveResults"></div>
   </div>
 
-  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.32.0 —</div>
+  <div class="footer">— created by <b>Joe Fdz &amp; Claude !!</b> · v2.33.0 —</div>
 
 </div>
 <div class="toast" id="toast"></div>
@@ -2282,6 +2282,9 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
       </button>`).join('');
     list.querySelectorAll('[data-jump]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
+        // Abre directamente la tarjeta de esa oficina (y cierra la que estuviera abierta) y baja a ella.
+        openBranch = btn.dataset.jump; animKey = 'b:'+openBranch;
+        renderBranches();
         const card = document.querySelector(`.branch-card[data-sucursal="${CSS.escape(btn.dataset.jump)}"]`);
         if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
       });
@@ -2650,6 +2653,8 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     h += chip(`💰 ${fmtMoney(des.real||0)} / ${fmtMoney(des.compromiso||0)}${pd===null?'':' · '+pd+'%'}`, gapClass(des.real, des.compromiso));
     const fi = m.fichas || {}, ap = m.prospeccion || {};
     h += chip(`📋 Fichas ${fi.real||0}/${fi.total||0}`, gapClass(fi.real, fi.total));
+    const m17 = m.mora17 || {};
+    h += chip(`📉 Fichas 1–7 ${m17.real||0}/${m17.total||0}`, gapClass(m17.real, m17.total));
     h += chip(`🔎 Approvals ${ap.real||0}/${ap.total||0}`, gapClass(ap.real, ap.total));
     return `<div class="branch-sum">${h}</div>`;
   }
@@ -3062,7 +3067,7 @@ idbGet('cartera').then(c=>{ if(c){ cart=c; const m=monthsList(), mes=today().sli
     $('#btnModoPrueba').addEventListener('click',()=>{ if(confirm('Vas a entrar a la consola de PRUEBA: solo verás reportes de prueba y tus datos reales no se tocan. ¿Entrar?')) flip(true); });
   })();
 
-  const APP_VERSION = 'v2.32.0';
+  const APP_VERSION = 'v2.33.0';
   { const vt=document.getElementById('vtag'); if(vt) vt.textContent = APP_VERSION; }
 
   /* ===== Buscar actualización (sin romper nada si no hay red) ===== */
